@@ -764,6 +764,7 @@ a{color:var(--pine2)}
 progress{width:100%;height:10px}
 .back{margin:-4px 0 8px -6px;color:var(--mute)}
 .phoneonly{display:none!important}
+input[type=password]{font:inherit;width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
 #loc{position:absolute;right:12px;bottom:26px;z-index:500;width:42px;height:42px;border-radius:50%;padding:0;font-size:20px;line-height:1;box-shadow:0 1px 6px #0004;background:var(--paper)}
 #sizer{display:none}
 #a2hs{display:none;background:#fff6d6;border-bottom:1px solid var(--gorse);padding:9px 12px;font-size:14px;line-height:1.4;gap:8px;align-items:flex-start}
@@ -811,7 +812,7 @@ progress{width:100%;height:10px}
   #loc{right:8px;bottom:22px}
   #hint{top:auto;bottom:10px;width:max-content;max-width:86vw;text-align:center}
   #warn{bottom:8px;font-size:14px}
-  #modal{align-items:flex-end;padding:0}
+  #modal{align-items:flex-end;padding:0;bottom:auto;height:var(--vh,100dvh)}
   #modal>div{width:100%;border-radius:18px 18px 0 0;max-height:88dvh;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
   #toast{bottom:calc(74px + env(safe-area-inset-bottom));width:max-content;max-width:92vw}
   #rvBar{flex-wrap:wrap;padding:calc(8px + env(safe-area-inset-top)) 10px 8px}
@@ -832,6 +833,7 @@ progress{width:100%;height:10px}
   <button class="primary" data-act="pick"><span class="deskonly">+ Add photos</span><span class="phoneonly">+ Photos</span></button>
   <button class="phoneonly" data-act="here">&#9678; Here</button>
   <button class="deskonly" data-act="addplace">+ Add place</button>
+  <button class="deskonly" data-act="sync">Sync</button>
   <button class="deskonly" data-act="backup">Backup</button>
   <button class="phoneonly" data-act="more" aria-label="More">&#8943;</button>
   <input id="file" type="file" multiple accept="image/*,video/*,.heic,.heif,.mov" hidden>
@@ -902,8 +904,8 @@ const ui={tab:'maps',mapId:null,placeId:null,postId:null,q:'',photoFilter:'all',
 let _idx=null;
 function byPlace(){if(!_idx){_idx=new Map();for(const ph of S.photos.values()){if(!ph.placeId)continue;if(!_idx.has(ph.placeId))_idx.set(ph.placeId,[]);_idx.get(ph.placeId).push(ph)}for(const a of _idx.values())a.sort((x,y)=>x.date-y.date)}return _idx}
 function photosOf(id){return byPlace().get(id)||[]}
-function save(store,o){_idx=null;o.upd=Date.now();S[store].set(o.id,o);return DB.put(store,o)}
-function remove(store,id){_idx=null;entomb(id);S[store].delete(id);return DB.del(store,id)}
+function save(store,o){_idx=null;o.upd=Date.now();S[store].set(o.id,o);markDirty(store,o.id);return DB.put(store,o)}
+function remove(store,id){_idx=null;entomb(id);markDirty(store,id);S[store].delete(id);return DB.del(store,id)}
 const TH={mem:new Map(),url:new Map()};
 async function putThumb(id,blob){if(DB.ok)await DB.put('thumbs',{id,blob});else TH.mem.set(id,blob)}
 async function getThumbBlob(id){if(TH.mem.has(id))return TH.mem.get(id);const r=await DB.get('thumbs',id);return r&&r.blob}
@@ -1462,11 +1464,11 @@ function setTomb(t){try{localStorage.setItem('tdt_tomb',JSON.stringify(t))}catch
 function entomb(id){const t=getTomb();t[id]=Date.now();setTomb(t)}
 
 async function mergeBackup(j){const tomb=getTomb(),inT=j.tomb||{},stores=['places','photos','maps','posts'];let add=0,upd=0,same=0,gone=0;const fresh=new Set();
-  for(const [id,t] of Object.entries(inT)){for(const s of stores){const o=S[s].get(id);if(o&&(o.upd||0)<t){S[s].delete(id);await DB.del(s,id);if(s==='photos'){await DB.del('thumbs',id);TH.mem.delete(id);TH.url.delete(id)}gone++}}if(!(tomb[id]>=t))tomb[id]=t}
+  for(const [id,t] of Object.entries(inT)){for(const s of stores){const o=S[s].get(id);if(o&&(o.upd||0)<t){S[s].delete(id);await DB.del(s,id);if(s==='photos'){await DB.del('thumbs',id);TH.mem.delete(id);TH.url.delete(id)}gone++}}if(!(tomb[id]>=t)){tomb[id]=t;if(!dirty[id])dirty[id]='x'}}
   setTomb(tomb);
-  for(const s of stores)for(const o of j[s]||[]){if(!o||!o.id)continue;if(tomb[o.id]&&tomb[o.id]>=(o.upd||0))continue;const cur=S[s].get(o.id);if(cur&&(cur.upd||0)>=(o.upd||0)){same++;continue}cur?upd++:add++;S[s].set(o.id,o);await DB.put(s,o);if(s==='photos')fresh.add(o.id)}
+  for(const s of stores)for(const o of j[s]||[]){if(!o||!o.id)continue;if(tomb[o.id]&&tomb[o.id]>=(o.upd||0))continue;const cur=S[s].get(o.id);if(cur&&(cur.upd||0)>=(o.upd||0)){same++;continue}cur?upd++:add++;S[s].set(o.id,o);await DB.put(s,o);dirty[o.id]=s;if(s==='photos')fresh.add(o.id)}
   for(const [id,u] of Object.entries(j.thumbs||{})){if(!S.photos.has(id))continue;if(!fresh.has(id)&&await getThumbBlob(id))continue;TH.url.delete(id);await putThumb(id,await dataURLToBlob(u))}
-  _idx=null;return {add,upd,same,gone}}
+  _idx=null;persistDirty();if(sess())queueSync(1500);return {add,upd,same,gone}}
 
 async function addToPlace(files,placeId){files=files.filter(isMedia);const p=S.places.get(placeId);if(!p||!files.length)return;
   modal(`<h2>Adding to ${esc(p.name)}…</h2><progress id="impProg" max="${files.length}" value="0"></progress><div id="impMsg" class="mono" style="margin-top:8px"></div>`);
@@ -1488,7 +1490,7 @@ function noGpsHelp(n,total){$('#toast').style.display='none';modal(`<h2>${n} of 
 
 Object.assign(ACT,{
   search(){const on=document.body.classList.toggle('searching');if(on)$('#q').focus();else if(ui.q){$('#q').value='';ui.q='';render()}setTimeout(()=>map.invalidateSize(),80)},
-  more(){modal(`<h2>More</h2><div class="menu"><button data-act="addplace">+ Add a place by name or on the map</button><button data-act="backup">Backup and transfer between phone and Mac</button><button data-act="install">Put this app on my Home Screen</button><button data-act="closemodal">Close</button></div><div class="mono" style="color:var(--mute);margin-top:12px">${S.places.size} places · ${S.photos.size} photos · ${S.maps.size} maps on this device</div>`)},
+  more(){modal(`<h2>More</h2><div class="menu"><button data-act="addplace">+ Add a place by name or on the map</button><button data-act="sync">Sync phone and Mac${sess()?' · on':''}</button><button data-act="backup">Backup file and Google Maps</button><button data-act="install">Put this app on my Home Screen</button><button data-act="closemodal">Close</button></div><div class="mono" style="color:var(--mute);margin-top:12px">${S.places.size} places · ${S.photos.size} photos · ${S.maps.size} maps on this device</div>`)},
   install(){modal(`<h2>Home Screen</h2>${STANDALONE?'<p>You are already using the Home Screen app. Your work is kept here.</p>':`<ol style="padding-left:20px;line-height:1.7;margin:6px 0"><li>Open this page in <b>Safari</b> on the iPhone.</li><li>Tap the <b>Share</b> button (the square with the arrow).</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>From now on open <b>TD Trips</b> from the Home Screen icon.</li></ol><p style="color:var(--rust)">Do this before adding places. The Home Screen app keeps its own saved work, separate from the Safari tab, and Safari can clear a site’s saved work after a week unused.</p>`}<div class="row" style="justify-content:flex-end"><button data-act="closemodal">Close</button></div>`)},
   hidea2hs(){LSset('tdt_a2hs','0');$('#a2hs').style.display='none'},
   async locate(){toast('Finding where you are…',15000);try{const {coords:c}=await getPos();$('#toast').style.display='none';showMe(c.latitude,c.longitude,c.accuracy);if(PHONE()&&ui.size==='list')setSize('split');map.setView([c.latitude,c.longitude],Math.max(map.getZoom(),16))}catch(e){toast(LOCHELP,9000)}},
@@ -1511,7 +1513,7 @@ Object.assign(ACT,{
   dlfile(){if(deliver.file){download(deliver.file.name,deliver.blob);closeModal()}},
   shownogps(){closeModal();ui.tab='photos';ui.placeId=null;ui.mapId=null;ui.photoFilter='unplaced';render()},
   delnogps(){for(const id of runImport.nog||[]){const ph=S.photos.get(id);if(ph&&!ph.placeId)removePhoto(id)}runImport.nog=[];closeModal();render();toast('Removed. Add them again with Location switched on in the picker.',7000)},
-  backup(){const last=LS('tdt_lastbackup','');modal(`<h2>Backup and transfer</h2><p style="color:var(--mute);margin:4px 0 0">Your places, notes and photo previews are kept on this device only. A backup file is your spare copy, and it is how work moves between your phone and your Mac.</p>
+  backup(){const last=LS('tdt_lastbackup','');modal(`<h2>Backup and transfer</h2><p style="color:var(--mute);margin:4px 0 0">A backup file is a spare copy of everything in the app that you keep yourself. ${sess()?'Sync is on, so your devices already keep each other up to date.':'To keep phone and Mac in step automatically, use <a href="#" data-act="sync">Sync</a> instead.'}</p>
     <h3>From this device</h3><button class="primary" data-act="dobackup">${TOUCH?'Send a backup file…':'Save a backup file'}</button><div class="mono" style="color:var(--mute);margin-top:6px">${last?'Last backup from here: '+esc(last):'No backup made from this device yet.'}</div>
     <h3>Into this device</h3><button data-act="dorestore">Merge in a backup file…</button><div class="mono" style="color:var(--mute);margin-top:6px">Merging keeps the newer version of each place, photo, map and draft. Nothing here is wiped.</div>
     <h3>Google Maps</h3><button data-act="kmlall">Send all places to Google Maps</button>
@@ -1528,8 +1530,78 @@ if(IOS&&!STANDALONE&&/^https?:$/.test(location.protocol)&&LS('tdt_a2hs','1')!=='
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 
+/* ---------- sync: one login on every device; the newest change to each record wins ---------- */
+const SYNC={url:'https://cradiqvzawgbvqiszfvi.supabase.co',key:'sb_publishable_C8o5gCh9gKCkLWthQzsMbA_txd24JJh',bucket:'tdt-thumbs',busy:false,again:false,msg:'',timer:null};
+const STORES4=['places','photos','maps','posts'];
+let dirty=(()=>{try{return JSON.parse(localStorage.getItem('tdt_dirty')||'{}')||{}}catch(e){return {}}})(),dirtyT=null;
+function persistDirty(){try{localStorage.setItem('tdt_dirty',JSON.stringify(dirty))}catch(e){}}
+function markDirty(store,id){dirty[id]=store;clearTimeout(dirtyT);dirtyT=setTimeout(persistDirty,400);if(sess())queueSync(5000)}
+function sess(){try{return JSON.parse(localStorage.getItem('tdt_sess')||'null')}catch(e){return null}}
+function setSess(s){try{s?localStorage.setItem('tdt_sess',JSON.stringify(s)):localStorage.removeItem('tdt_sess')}catch(e){}}
+function keepSess(j){setSess({at:j.access_token,rt:j.refresh_token,exp:Date.now()+(j.expires_in||3600)*1000,uid:j.user.id,email:j.user.email})}
+async function sbAuth(path,body,token){const r=await fetch(SYNC.url+'/auth/v1/'+path,{method:'POST',headers:Object.assign({'Content-Type':'application/json',apikey:SYNC.key},token?{Authorization:'Bearer '+token}:{}),body:JSON.stringify(body||{})});let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw new Error(j.msg||j.error_description||j.message||j.error||('Error '+r.status));return j}
+async function sbToken(){let s=sess();if(!s)throw new Error('Signed out');if(s.exp-Date.now()<90000){try{keepSess(await sbAuth('token?grant_type=refresh_token',{refresh_token:s.rt}));s=sess()}catch(e){if(/invalid|not found|revoked|expired|already used/i.test(e.message)){setSess(null);throw new Error('Please sign in again')}throw e}}return s}
+async function sb(path,opt={}){const s=await sbToken();return fetch(SYNC.url+path,Object.assign({},opt,{headers:Object.assign({apikey:SYNC.key,Authorization:'Bearer '+s.at},opt.headers||{})}))}
+function setSyncMsg(m){SYNC.msg=m;const el=$('#syncMsg');if(el)el.textContent=syncLine()}
+function syncLine(){const s=sess();if(!s)return 'Not signed in on this device.';if(SYNC.msg)return SYNC.msg;const n=Object.keys(dirty).length,l=+LS('tdt_lastsync','0');return (l?'Last synced '+new Date(l).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'Not synced yet')+(n?` · ${n} change${n>1?'s':''} waiting to send`:'')}
+function queueSync(ms){clearTimeout(SYNC.timer);SYNC.timer=setTimeout(()=>syncNow(false),ms)}
+const thWant=()=>new Set(LS('tdt_thwant','').split(',').filter(Boolean));
+
+async function syncNow(manual){if(!sess()){if(manual)ACT.sync();return}if(SYNC.busy){SYNC.again=true;return}SYNC.busy=true;setSyncMsg('Syncing…');
+  try{const s=await sbToken();
+    if(LS('tdt_synced_as','')!==s.uid){for(const st of STORES4)for(const o of S[st].values())dirty[o.id]=st;for(const id of Object.keys(getTomb()))if(!dirty[id])dirty[id]='x';LSset('tdt_cursor','0');LSset('tdt_thup','');LSset('tdt_thwant','');LSset('tdt_synced_as',s.uid);persistDirty()}
+    const got=await syncPull(s),sent=await syncPush(s),th=await syncThumbs(s);
+    LSset('tdt_lastsync',String(Date.now()));setSyncMsg('');if(got||th)softRender();if(manual)toast(`Synced: ${sent} sent, ${got} received`,5000)}
+  catch(e){setSyncMsg(navigator.onLine===false?'Offline. Changes are kept here and sent when you are back online.':'Sync did not finish: '+(e.message||e));if(manual)toast(SYNC.msg,8000)}
+  SYNC.busy=false;if(SYNC.again){SYNC.again=false;queueSync(1500)}}
+
+async function syncPull(s){let cur=+LS('tdt_cursor','0')||0,n=0,tch=false;const tomb=getTomb(),want=thWant();
+  for(;;){const r=await sb(`/rest/v1/tdt_records?select=id,store,upd,deleted,data,rev&rev=gt.${cur}&order=rev.asc&limit=500`);if(!r.ok)throw new Error(r.status===401||r.status===403?'this login is not allowed to use the sync store':'could not read from the sync store ('+r.status+')');const rows=await r.json();
+    for(const row of rows){cur=Math.max(cur,+row.rev);const id=row.id,u=+row.upd;
+      if(row.deleted){if(!(tomb[id]>=u)){tomb[id]=u;tch=true}for(const st of STORES4){const o=S[st].get(id);if(o&&(o.upd||0)<u){S[st].delete(id);await DB.del(st,id);if(st==='photos'){await DB.del('thumbs',id);TH.mem.delete(id);TH.url.delete(id);want.delete(id)}delete dirty[id];n++}}continue}
+      if(!STORES4.includes(row.store)||!row.data)continue;if(tomb[id]&&tomb[id]>=u)continue;const have=S[row.store].get(id);if(have&&(have.upd||0)>=u)continue;
+      const o=row.data;o.upd=u;S[row.store].set(id,o);await DB.put(row.store,o);delete dirty[id];n++;if(row.store==='photos'&&o.thumb&&!(await getThumbBlob(id)))want.add(id)}
+    LSset('tdt_cursor',String(cur));if(rows.length<500)break}
+  if(tch)setTomb(tomb);_idx=null;LSset('tdt_thwant',[...want].join(','));persistDirty();return n}
+
+async function syncPush(s){const ids=Object.keys(dirty);if(!ids.length)return 0;const tomb=getTomb(),up=new Set(LS('tdt_thup','').split(',').filter(Boolean));let sent=0;
+  for(let i=0;i<ids.length;i+=100){const rows=[];
+    for(const id of ids.slice(i,i+100)){const st=dirty[id],o=S[st]&&S[st].get(id);
+      if(o){if(st==='photos'&&o.thumb&&!up.has(id)){const b=await getThumbBlob(id);if(b){const r=await sb(`/storage/v1/object/${SYNC.bucket}/${s.uid}/${id}`,{method:'POST',headers:{'Content-Type':'image/jpeg','x-upsert':'true'},body:b});if(!r.ok)throw new Error('could not send a photo preview ('+r.status+')');up.add(id)}}
+        rows.push({id,store:st,upd:o.upd||1,deleted:false,data:o})}
+      else if(tomb[id]){rows.push({id,store:st,upd:tomb[id],deleted:true,data:null});if(up.has(id)){up.delete(id);sb(`/storage/v1/object/${SYNC.bucket}/${s.uid}/${id}`,{method:'DELETE'}).catch(()=>{})}}
+      else delete dirty[id]}
+    if(rows.length){const r=await sb('/rest/v1/rpc/tdt_push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})});if(!r.ok)throw new Error(r.status===401||r.status===403?'this login is not allowed to use the sync store':'could not send changes ('+r.status+')');
+      for(const row of rows){const o=S[row.store]&&S[row.store].get(row.id);if(row.deleted||!o||(o.upd||1)===row.upd)delete dirty[row.id]}sent+=rows.length}
+    LSset('tdt_thup',[...up].join(','));persistDirty();if(ids.length>100)setSyncMsg(`Sending… ${Math.min(i+100,ids.length)} of ${ids.length}`)}
+  return sent}
+
+async function syncThumbs(s){const want=[...thWant()];if(!want.length)return 0;const left=new Set(want),up=new Set(LS('tdt_thup','').split(',').filter(Boolean));let n=0,i=0;
+  const worker=async()=>{while(i<want.length){const id=want[i++];if(!S.photos.has(id)){left.delete(id);continue}try{const r=await sb(`/storage/v1/object/authenticated/${SYNC.bucket}/${s.uid}/${id}`);if(r.ok){TH.url.delete(id);await putThumb(id,await r.blob());left.delete(id);up.add(id);n++;if(n%20===0){setSyncMsg(`Fetching photo previews… ${n} of ${want.length}`);softRender()}}}catch(e){}}};
+  await Promise.all([worker(),worker(),worker(),worker()]);LSset('tdt_thwant',[...left].join(','));LSset('tdt_thup',[...up].join(','));return n}
+
+Object.assign(ACT,{
+  sync(){const s=sess();
+    if(s){modal(`<h2>Sync</h2><p style="margin:4px 0 0">Signed in as <b>${esc(s.email)}</b>.</p><div id="syncMsg" class="mono" style="color:var(--mute);margin:8px 0 14px">${esc(syncLine())}</div><p style="color:var(--mute);font-size:14px">Places, notes, maps, drafts and photo previews are kept in step on every device signed in with this login. It runs by itself when you open the app, when you make changes and when you come back online. Your original photos stay in your photo library.</p><div class="row wrap" style="justify-content:flex-end;margin-top:12px"><button data-act="signout" class="ghost danger">Sign out</button><button data-act="closemodal">Close</button><button class="primary" data-act="syncnow">Sync now</button></div>`);return}
+    modal(`<h2>Sync phone and Mac</h2><p style="color:var(--mute);margin:4px 0 0">Sign in with the same email and password on each device. Places, private notes, maps, drafts and photo previews are then kept in step through your own private database. Original photos never leave your photo library.</p>
+    <label class="f">Email</label><input id="syEmail" type="text" inputmode="email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label class="f">Password <small>— at least 8 characters</small></label><input id="syPass" type="password" autocomplete="current-password">
+    <div id="syErr" style="color:var(--rust);margin-top:8px;font-size:14px"></div>
+    <div class="row wrap" style="justify-content:flex-end;margin-top:12px"><button data-act="closemodal">Close</button><button data-act="signup">Create my login</button><button class="primary" data-act="signin">Sign in</button></div>
+    <div class="mono" style="color:var(--mute);margin-top:10px">First time: choose Create my login, open the confirmation email, then come back here and Sign in. Do that once; after that just Sign in on each device.</div>`)},
+  async signin(){const email=$('#syEmail').value.trim(),password=$('#syPass').value;if(!email||!password){$('#syErr').textContent='Enter your email and password.';return}$('#syErr').textContent='Signing in…';
+    try{keepSess(await sbAuth('token?grant_type=password',{email,password}));closeModal();toast('Signed in. Syncing…',4000);syncNow(true)}catch(e){$('#syErr').textContent=/confirm/i.test(e.message)?'Open the confirmation email first, then sign in.':/invalid/i.test(e.message)?'That email and password do not match.':'Could not sign in: '+e.message}},
+  async signup(){const email=$('#syEmail').value.trim(),password=$('#syPass').value;if(!email||password.length<8){$('#syErr').textContent='Enter your email and a password of at least 8 characters.';return}$('#syErr').textContent='Creating…';
+    try{const j=await sbAuth('signup',{email,password});if(j.access_token){keepSess(j);closeModal();syncNow(true)}else{$('#syErr').style.color='var(--pine)';$('#syErr').textContent='Almost there. Open the confirmation email sent to '+email+', tap the link, then come back and tap Sign in.'}}catch(e){$('#syErr').textContent='Could not create the login: '+e.message}},
+  async signout(){const s=sess();try{if(s)await sbAuth('logout',{},s.at)}catch(e){}setSess(null);closeModal();toast('Signed out. Everything stays on this device.',5000)},
+  syncnow(){closeModal();syncNow(true)}
+});
+window.addEventListener('online',()=>{if(sess())queueSync(1000)});
+document.addEventListener('visibilitychange',()=>{persistDirty();if(sess())document.hidden?syncNow(false):queueSync(600)});
+window.addEventListener('pagehide',persistDirty);
+
 /* ---------- start ---------- */
-(async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
+(async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if(sess())queueSync(800);if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
 </script>
 </body>
 </html>
