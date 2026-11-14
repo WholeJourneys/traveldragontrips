@@ -1431,10 +1431,14 @@ document.addEventListener('change',e=>{const el=e.target;
 document.addEventListener('keydown',e=>{if(ui.rv){const k=e.key.toLowerCase();if(k==='arrowleft')ACT.rvprev();else if(k==='arrowright')ACT.rvnext();else if(k==='s')ACT.rvstar();else if(k==='x'||k==='delete'||k==='backspace')ACT.rvdel();else if(k==='escape')ACT.rvclose();else return;e.preventDefault();return}if(e.key==='Escape'){closeModal();if(ui.mode)setMode(null)}});
 let mvT;map.on('moveend',()=>{if(ui.inView&&ui.tab==='photos'&&!ui.placeId){clearTimeout(mvT);mvT=setTimeout(render,250)}});
 let dragN=0;
-window.addEventListener('dragenter',e=>{if([...(e.dataTransfer?.types||[])].includes('Files')){dragN++;$('#drop').style.display='flex';e.preventDefault()}});
-window.addEventListener('dragover',e=>{if($('#drop').style.display==='flex')e.preventDefault()});
+let inPageDrag=false;document.addEventListener('dragstart',()=>{inPageDrag=true});document.addEventListener('dragend',()=>{inPageDrag=false});
+window.addEventListener('dragenter',e=>{if(inPageDrag)return;dragN++;$('#drop').style.display='flex';e.preventDefault()});
+window.addEventListener('dragover',e=>{if(inPageDrag)return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy'});
+window.addEventListener('drop',async e=>{if(inPageDrag)return;e.preventDefault();dragN=0;$('#drop').style.display='none';if(!e.dataTransfer)return;const fs=await collectDropped(e.dataTransfer);if(fs&&fs.length){askImport(fs);return}
+  modal(`<h2>No photos came through</h2><p>The photos were dropped, but the Photos app did not hand the files to the browser. This can happen with big selections or photos still stored in iCloud.</p><h3>Use this instead</h3><ol style="padding-left:20px;line-height:1.6;margin:4px 0"><li>Click <b>+ Add photos</b>.</li><li>In the window that opens, find <b>Photos</b> in the left sidebar under <b>Media</b>.</li><li>Open your album, press <b>Cmd + A</b>, then <b>Open</b>.</li></ol><div class="row" style="justify-content:flex-end;margin-top:12px"><button data-act="closemodal">Close</button><button class="primary" data-act="pick">Add photos now</button></div>`)});
+
 window.addEventListener('dragleave',()=>{dragN=Math.max(0,dragN-1);if(!dragN)$('#drop').style.display='none'});
-window.addEventListener('drop',async e=>{e.preventDefault();dragN=0;$('#drop').style.display='none';if(!e.dataTransfer)return;askImport(await collectDropped(e.dataTransfer))});
+
 
 /* ---------- phone: layout, location, sending files, merging ---------- */
 function setSize(s){document.body.classList.remove('sz-map','sz-list');if(s!=='split')document.body.classList.add('sz-'+s);ui.size=s;document.querySelectorAll('#sizer button').forEach(b=>b.classList.toggle('on',b.dataset.size===s));setTimeout(()=>map.invalidateSize(),80)}
