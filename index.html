@@ -1550,7 +1550,7 @@ const thWant=()=>new Set(LS('tdt_thwant','').split(',').filter(Boolean));
 
 async function syncNow(manual){if(!sess()){if(manual)ACT.sync();return}if(SYNC.busy){SYNC.again=true;return}SYNC.busy=true;setSyncMsg('Syncing…');
   try{const s=await sbToken();
-    if(LS('tdt_synced_as','')!==s.uid){for(const st of STORES4)for(const o of S[st].values())dirty[o.id]=st;for(const id of Object.keys(getTomb()))if(!dirty[id])dirty[id]='x';LSset('tdt_cursor','0');LSset('tdt_thup','');LSset('tdt_thwant','');LSset('tdt_synced_as',s.uid);persistDirty()}
+    if(LS('tdt_synced_as','')!==s.uid){for(const st of STORES4)for(const o of S[st].values())dirty[o.id]=st;for(const id of Object.keys(getTomb()))if(!dirty[id])dirty[id]='x';if(LS('tdt_gkey','')){if(!+LS('tdt_cfg_upd','0'))LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg'}LSset('tdt_cursor','0');LSset('tdt_thup','');LSset('tdt_thwant','');LSset('tdt_synced_as',s.uid);persistDirty()}
     const got=await syncPull(s),sent=await syncPush(s),th=await syncThumbs(s);
     LSset('tdt_lastsync',String(Date.now()));setSyncMsg('');if(got||th)softRender();if(manual)toast(`Synced: ${sent} sent, ${got} received`,5000)}
   catch(e){setSyncMsg(navigator.onLine===false?'Offline. Changes are kept here and sent when you are back online.':'Sync did not finish: '+(e.message||e));if(manual)toast(SYNC.msg,8000)}
@@ -1560,6 +1560,7 @@ async function syncPull(s){let cur=+LS('tdt_cursor','0')||0,n=0,tch=false;const 
   for(;;){const r=await sb(`/rest/v1/tdt_records?select=id,store,upd,deleted,data,rev&rev=gt.${cur}&order=rev.asc&limit=500`);if(!r.ok)throw new Error(r.status===401||r.status===403?'this login is not allowed to use the sync store':'could not read from the sync store ('+r.status+')');const rows=await r.json();
     for(const row of rows){cur=Math.max(cur,+row.rev);const id=row.id,u=+row.upd;
       if(row.deleted){if(!(tomb[id]>=u)){tomb[id]=u;tch=true}for(const st of STORES4){const o=S[st].get(id);if(o&&(o.upd||0)<u){S[st].delete(id);await DB.del(st,id);if(st==='photos'){await DB.del('thumbs',id);TH.mem.delete(id);TH.url.delete(id);want.delete(id)}delete dirty[id];n++}}continue}
+      if(row.store==='cfg'&&row.data){if(u>(+LS('tdt_cfg_upd','0')||0)){const had=gKey();LSset('tdt_cfg_upd',String(u));LSset('tdt_gkey',row.data.gkey||'');delete dirty.cfg;if(gKey()!==had){n++;if(gmP)setTimeout(()=>toast('Your Google key changed on another device. Reload this page to use it.',9000),500)}}continue}
       if(!STORES4.includes(row.store)||!row.data)continue;if(tomb[id]&&tomb[id]>=u)continue;const have=S[row.store].get(id);if(have&&(have.upd||0)>=u)continue;
       const o=row.data;o.upd=u;S[row.store].set(id,o);await DB.put(row.store,o);delete dirty[id];n++;if(row.store==='photos'&&o.thumb&&!(await getThumbBlob(id)))want.add(id)}
     LSset('tdt_cursor',String(cur));if(rows.length<500)break}
@@ -1568,6 +1569,7 @@ async function syncPull(s){let cur=+LS('tdt_cursor','0')||0,n=0,tch=false;const 
 async function syncPush(s){const ids=Object.keys(dirty);if(!ids.length)return 0;const tomb=getTomb(),up=new Set(LS('tdt_thup','').split(',').filter(Boolean));let sent=0;
   for(let i=0;i<ids.length;i+=100){const rows=[];
     for(const id of ids.slice(i,i+100)){const st=dirty[id],o=S[st]&&S[st].get(id);
+      if(st==='cfg'){rows.push({id:'cfg',store:'cfg',upd:+LS('tdt_cfg_upd','0')||Date.now(),deleted:false,data:{gkey:LS('tdt_gkey','')}});continue}
       if(o){if(st==='photos'&&o.thumb&&!up.has(id)){const b=await getThumbBlob(id);if(b){const r=await sb(`/storage/v1/object/${SYNC.bucket}/${s.uid}/${id}`,{method:'POST',headers:{'Content-Type':'image/jpeg','x-upsert':'true'},body:b});if(!r.ok)throw new Error('could not send a photo preview ('+r.status+')');up.add(id)}}
         rows.push({id,store:st,upd:o.upd||1,deleted:false,data:o})}
       else if(tomb[id]){rows.push({id,store:st,upd:tomb[id],deleted:true,data:null});if(up.has(id)){up.delete(id);sb(`/storage/v1/object/${SYNC.bucket}/${s.uid}/${id}`,{method:'DELETE'}).catch(()=>{})}}
@@ -1650,10 +1652,10 @@ Object.assign(ACT,{
     <h3>Get the key, once</h3><ol style="padding-left:20px;line-height:1.6;margin:4px 0;font-size:14px"><li>Go to <b>console.cloud.google.com/google/maps-apis</b> and sign in with your work Google account.</li><li>Create a project named <b>TravelDragonTrips</b> and add a billing card when asked. Google gives a free monthly allowance; you pay only beyond it.</li><li>Under <b>APIs &amp; Services</b>, enable <b>Maps JavaScript API</b> and <b>Places API (New)</b>.</li><li>Under <b>Keys &amp; Credentials</b>, create an <b>API key</b>.</li><li>Restrict it: <b>Websites</b> → add <span class="mono">${esc(location.protocol==='file:'?'https://wholejourneys.github.io/*':location.origin+'/*')}</span>; <b>API restrictions</b> → those two APIs.</li><li>Copy the key and paste it below.</li></ol>
     ${location.protocol==='file:'?'<p style="color:var(--rust);font-size:14px">You have this open as a file. A key restricted to the web address will not work here, so on the Mac open the web address instead; Sync brings your places across.</p>':''}
     <label class="f">Google Maps key</label><input id="gkeyIn" type="text" value="${esc(LS('tdt_gkey',''))}" placeholder="Starts with AIza" autocapitalize="off" autocorrect="off" spellcheck="false">
-    <div class="mono" style="color:var(--mute);margin-top:6px">Kept on this device. Paste it once on each device you use.</div>
+    <div class="mono" style="color:var(--mute);margin-top:6px">${sess()?'Paste it once. Sync carries it to your other devices.':'Kept on this device. Sign in to Sync and it reaches your other devices too.'}</div>
     <div class="row wrap" style="justify-content:flex-end;margin-top:14px"><button data-act="closemodal">Close</button>${LS('tdt_gkey','')?'<button class="ghost danger" data-act="gdropkey">Remove the key</button>':''}<button class="primary" data-act="gsavekey">Save and reload</button></div>`)},
-  gsavekey(){const k=($('#gkeyIn').value||'').trim();if(!k){toast('Paste the key first');return}LSset('tdt_gkey',k);location.reload()},
-  gdropkey(){try{localStorage.removeItem('tdt_gkey')}catch(e){}location.reload()}
+  gsavekey(){const k=($('#gkeyIn').value||'').trim();if(!k){toast('Paste the key first');return}LSset('tdt_gkey',k);LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty();location.reload()},
+  gdropkey(){LSset('tdt_gkey','');LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty();location.reload()}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target&&e.target.id==='gq'){e.preventDefault();ACT.gsearch()}});
 
