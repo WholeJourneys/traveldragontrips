@@ -1253,9 +1253,10 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   <div class="row wrap" style="margin-top:8px"><button class="primary" data-act="pickhere">+ Add photos to this place</button></div>
   ${TOUCH?`<div class="mono" style="color:var(--mute);margin-top:4px">Take pictures with the Camera app first, then add them here from your library, so the originals stay in your photos.</div>`:''}
   <div class="row wrap" style="margin-top:8px"><a class="btn" target="_blank" rel="noopener" href="${g}">Google Maps ↗</a><a class="btn" target="_blank" rel="noopener" href="${web}">Find website ↗</a><button class="sm" data-act="findname" title="Searches the map for the name typed above, near this pin">Find by name</button><button class="sm" data-act="lookup">Look up name</button></div>
-  <div class="row" style="margin-top:14px;gap:6px"><h3 class="grow" style="margin:0">Google view</h3>${isRough(p)?'':`<span class="chip${gpin?'':' on'}" data-act="gv" data-id="list">Listing</span><span class="chip${gpin?' on':''}" data-act="gv" data-id="pin">At the pin</span>`}<span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
+  ${gKey()?gBlock(p):`<div class="row" style="margin-top:14px;gap:6px"><h3 class="grow" style="margin:0">Google view</h3>${isRough(p)?'':`<span class="chip${gpin?'':' on'}" data-act="gv" data-id="list">Listing</span><span class="chip${gpin?' on':''}" data-act="gv" data-id="pin">At the pin</span>`}<span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
   ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google view here</button>`:`<iframe class="gframe" loading="lazy" title="Google Maps view of this place" src="${esc(gEmbed(p,gpin,ui.gsat))}"></iframe>`}
   <div class="mono" style="color:var(--mute);margin-top:4px">${isRough(p)?'This is what Google shows at the pin. Spot the right name, type it at the top, and the listing loads here.':'Live from Google. “Open in Maps” shows the full listing with website, phone and reviews.'}</div>
+  <button class="sm" data-act="gsetup" style="margin-top:8px">Pick the place on a Google map here: set up</button>`}
   <h3>Named places nearby <small style="text-transform:none;letter-spacing:0;font-weight:400">· click one to move this place onto it</small></h3><div id="near"><span class="mono" style="color:var(--mute)">Looking…</span></div>
   ${(p.hist||[]).length?`<button class="sm" data-act="undoloc" style="margin-top:8px">↩ Undo location change (back to “${esc(p.hist[p.hist.length-1].name)}”, changed ${fmtDate(p.hist[p.hist.length-1].at)})</button>`:''}
   <h3>Contact ${inf.src?`<small style="text-transform:none;letter-spacing:0;font-weight:400">· filled from ${esc(inf.src)}, check before relying on it</small>`:''}</h3>
@@ -1290,7 +1291,7 @@ function render(fit){
   const panel=$('#panel');const top=panel.scrollTop;
   panel.innerHTML=p?vPlace(p):({maps:vMaps,places:vPlaces,photos:vPhotos,posts:vPosts}[ui.tab])();
   panel.scrollTop=render.last===(ui.placeId||ui.tab+ui.mapId+ui.postId)?top:0;render.last=ui.placeId||ui.tab+ui.mapId+ui.postId;
-  hydrate(panel);drawPins(fit);if(p)loadNear(p);
+  hydrate(panel);drawPins(fit);if(p){loadNear(p);mountG(p)}
   $('#stats').textContent=`${S.places.size} places · ${S.photos.size} photos · ${S.maps.size} maps`+(DB.ok?'':' · NOT SAVING (private window?)');
 }
 
@@ -1490,7 +1491,7 @@ function noGpsHelp(n,total){$('#toast').style.display='none';modal(`<h2>${n} of 
 
 Object.assign(ACT,{
   search(){const on=document.body.classList.toggle('searching');if(on)$('#q').focus();else if(ui.q){$('#q').value='';ui.q='';render()}setTimeout(()=>map.invalidateSize(),80)},
-  more(){modal(`<h2>More</h2><div class="menu"><button data-act="addplace">+ Add a place by name or on the map</button><button data-act="sync">Sync phone and Mac${sess()?' · on':''}</button><button data-act="backup">Backup file and Google Maps</button><button data-act="install">Put this app on my Home Screen</button><button data-act="closemodal">Close</button></div><div class="mono" style="color:var(--mute);margin-top:12px">${S.places.size} places · ${S.photos.size} photos · ${S.maps.size} maps on this device</div>`)},
+  more(){modal(`<h2>More</h2><div class="menu"><button data-act="addplace">+ Add a place by name or on the map</button><button data-act="sync">Sync phone and Mac${sess()?' · on':''}</button><button data-act="backup">Backup file and Google Maps</button><button data-act="gsetup">Google place picking${gKey()?' · on':''}</button><button data-act="install">Put this app on my Home Screen</button><button data-act="closemodal">Close</button></div><div class="mono" style="color:var(--mute);margin-top:12px">${S.places.size} places · ${S.photos.size} photos · ${S.maps.size} maps on this device</div>`)},
   install(){modal(`<h2>Home Screen</h2>${STANDALONE?'<p>You are already using the Home Screen app. Your work is kept here.</p>':`<ol style="padding-left:20px;line-height:1.7;margin:6px 0"><li>Open this page in <b>Safari</b> on the iPhone.</li><li>Tap the <b>Share</b> button (the square with the arrow).</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>From now on open <b>TD Trips</b> from the Home Screen icon.</li></ol><p style="color:var(--rust)">Do this before adding places. The Home Screen app keeps its own saved work, separate from the Safari tab, and Safari can clear a site’s saved work after a week unused.</p>`}<div class="row" style="justify-content:flex-end"><button data-act="closemodal">Close</button></div>`)},
   hidea2hs(){LSset('tdt_a2hs','0');$('#a2hs').style.display='none'},
   async locate(){toast('Finding where you are…',15000);try{const {coords:c}=await getPos();$('#toast').style.display='none';showMe(c.latitude,c.longitude,c.accuracy);if(PHONE()&&ui.size==='list')setSize('split');map.setView([c.latitude,c.longitude],Math.max(map.getZoom(),16))}catch(e){toast(LOCHELP,9000)}},
@@ -1599,6 +1600,62 @@ Object.assign(ACT,{
 window.addEventListener('online',()=>{if(sess())queueSync(1000)});
 document.addEventListener('visibilitychange',()=>{persistDirty();if(sess())document.hidden?syncNow(false):queueSync(600)});
 window.addEventListener('pagehide',persistDirty);
+
+/* ---------- Google: pick a listing on the small map inside the app (needs a Google Maps key) ---------- */
+const GKEY_BAKED='';
+const gKey=()=>LS('tdt_gkey','')||GKEY_BAKED;
+let gmP=null,gFail='',gMap=null,gDiv=null,gMk=null,gFor=null;
+const gFailHtml=()=>`<div style="padding:12px;font-size:14px"><b>Google did not accept the key.</b><div style="margin:6px 0;color:var(--mute)">${esc(gFail)}</div><button class="sm" data-act="gsetup">Check the key</button></div>`;
+function gmLoad(){if(gmP)return gmP;gmP=new Promise((res,rej)=>{window.__gmReady=()=>res(window.google.maps);
+  window.gm_authFailure=()=>{gFail='Check that the key is pasted in full, that Maps JavaScript API and Places API (New) are both switched on for it, and that this web address is on its allowed list.';const b=$('#gbox');if(b)b.innerHTML=gFailHtml()};
+  const s=document.createElement('script');s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(gKey())+'&v=weekly&libraries=places&loading=async&language=en&callback=__gmReady';s.async=true;s.onerror=()=>{gmP=null;rej(new Error('offline'))};document.head.appendChild(s)});return gmP}
+function gBlock(p){return `<div class="row" style="margin-top:14px;gap:6px"><h3 class="grow" style="margin:0">Google map <small style="text-transform:none;letter-spacing:0;font-weight:400">· ${TAP.toLowerCase()} a place on it to use it</small></h3><span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
+  ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google map here</button>`:`<div id="gbox" class="gframe" style="overflow:hidden"></div><div id="gask" style="margin-top:6px"></div>
+  <div class="link" style="margin-top:6px"><input id="gq" type="text" placeholder="Search Google near this pin, e.g. the hotel name" enterkeyhint="search"><button class="sm" data-act="gsearch">Search</button></div><div id="gres" style="margin-top:4px"></div>
+  <div class="mono" style="color:var(--mute);margin-top:4px">${TAP} a hotel, restaurant or sight on the map, or search by name. ${TAP} empty ground to move just the pin.${TOUCH?' Use two fingers to move the map.':''}</div>`}`}
+async function mountG(p){if(!gKey()||!$('#gbox'))return;if(gFail){$('#gbox').innerHTML=gFailHtml();return}
+  let maps;try{maps=await gmLoad()}catch(e){const b=$('#gbox');if(b)b.innerHTML='<div class="mono" style="padding:12px;color:var(--mute)">The Google map needs an internet connection.</div>';return}
+  const b=$('#gbox');if(!b||ui.placeId!==p.id||gFail)return;const pos={lat:p.lat,lng:p.lng};
+  if(!gDiv){gDiv=document.createElement('div');gDiv.style.cssText='width:100%;height:100%';
+    gMap=new maps.Map(gDiv,{center:pos,zoom:17,disableDefaultUI:true,zoomControl:true,fullscreenControl:true,clickableIcons:true,gestureHandling:'cooperative',mapTypeId:ui.gsat?'hybrid':'roadmap'});
+    gMap.addListener('click',e=>{if(e.placeId){if(e.stop)e.stop();gPick(e.placeId)}else if(e.latLng)gSpot(e.latLng.lat(),e.latLng.lng())});
+    try{gMk=new maps.Marker({map:gMap,position:pos,title:'Where this place is pinned now'})}catch(e){gMk=null}}
+  b.innerHTML='';b.appendChild(gDiv);gMap.setMapTypeId(ui.gsat?'hybrid':'roadmap');
+  const key=p.id+'|'+p.lat+'|'+p.lng;if(gFor!==key){gFor=key;gMap.setCenter(pos);gMap.setZoom(17);if(gMk)gMk.setPosition(pos)}}
+function gSpot(lat,lng){const p=S.places.get(ui.placeId),a=$('#gask');if(!p||!a)return;ACT._gspot={lat,lng};
+  a.innerHTML=`<div class="card" style="cursor:default;display:block"><div class="t">Move the pin to this spot?</div><div class="s">${fmtD(dist(p.lat,p.lng,lat,lng))} from where it is now. The name stays “${esc(p.name)}”.</div><div class="row wrap" style="margin-top:8px"><button class="primary sm" data-act="gspotyes">Yes, move it</button><button class="sm" data-act="gno">No</button></div></div>`}
+function gType(types){const t=' '+(types||[]).join(' ')+' ';if(/ (lodging|hotel|resort_hotel|bed_and_breakfast|guest_house|hostel|inn|motel|farmstay|campground|cottage|private_guest_room|extended_stay_hotel) /.test(t))return 'stay';if(/ (restaurant|cafe|bar|bakery|coffee_shop|wine_bar|pub|meal_takeaway|ice_cream_shop|food) /.test(t)||/_restaurant /.test(t))return 'eat';if(/ (hiking_area|trail) /.test(t))return 'walk';if(/ (observation_deck|beach|natural_feature|scenic_spot|park|national_park|garden) /.test(t))return 'view';if(/ (tourist_attraction|museum|historical_landmark|historical_place|cultural_landmark|art_gallery|church|place_of_worship|monument|winery|farm|spa|visitor_center) /.test(t))return 'exp';if(/ (parking|train_station|bus_station|airport|ferry_terminal|transit_station|car_rental) /.test(t))return 'move';if(/ (convention_center|event_venue) /.test(t))return 'show';return null}
+async function gPick(id){const p=S.places.get(ui.placeId),a=$('#gask');if(!p||!a)return;a.innerHTML='<span class="mono" style="color:var(--mute)">Asking Google about this place…</span>';
+  try{const {Place}=await google.maps.importLibrary('places');const pl=new Place({id});await pl.fetchFields({fields:['displayName','location','formattedAddress','googleMapsURI','websiteURI','nationalPhoneNumber','internationalPhoneNumber','primaryType','types']});
+    const g=ACT._g={id,name:pl.displayName||'',lat:pl.location.lat(),lng:pl.location.lng(),addr:pl.formattedAddress||'',url:pl.googleMapsURI||'',web:pl.websiteURI||'',phone:pl.internationalPhoneNumber||pl.nationalPhoneNumber||'',types:[pl.primaryType,...(pl.types||[])].filter(Boolean)};
+    const box=$('#gask');if(!box)return;const t=gType(g.types);
+    box.innerHTML=`<div class="card" style="cursor:default;display:block"><div class="t">${esc(g.name)}</div><div class="s">${esc(g.addr)}</div>
+      <div style="font-size:13px;margin-top:6px;line-height:1.5">${t?esc(TYPES[t][0])+' · ':''}${fmtD(dist(p.lat,p.lng,g.lat,g.lng))} from the current pin${g.web?'<br>'+esc(g.web.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,'')):''}${g.phone?'<br>'+esc(g.phone):''}</div>
+      <div class="row wrap" style="margin-top:8px"><button class="primary sm" data-act="guse">Use this place</button><button class="sm" data-act="gpinonly">Only move the pin</button><button class="sm" data-act="gno">No</button></div>
+      <div class="mono" style="color:var(--mute);margin-top:6px">“Use this place” sets the name, pin, type, website, phone and Google link. Your notes and photos are untouched.</div></div>`}
+  catch(e){const box=$('#gask');if(box)box.innerHTML=`<span style="color:var(--rust);font-size:13px">Google could not give details for that place. ${esc(e&&e.message||'')}</span>`}}
+function gApply(p,lat,lng){snap(p);p.lat=lat;p.lng=lng}
+Object.assign(ACT,{
+  guse(){const p=S.places.get(ui.placeId),g=ACT._g;if(!p||!g)return;gApply(p,g.lat,g.lng);if(g.name)p.name=g.name;if(g.url)p.gmaps=g.url;p.gid=g.id;p.auto=false;p.rough=false;const t=gType(g.types);if(t&&(!p.type||p.type==='other'))p.type=t;const c=p.info||{};if(g.web||g.phone)p.info={website:g.web||c.website||'',phone:g.phone||c.phone||'',email:c.email||'',src:'Google'};save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Now “'+p.name+'”. Undo is just below the map.',6000)},
+  gpinonly(){const p=S.places.get(ui.placeId),g=ACT._g;if(!p||!g)return;gApply(p,g.lat,g.lng);p.rough=false;save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is just below the map.',5000)},
+  gspotyes(){const p=S.places.get(ui.placeId),c=ACT._gspot;if(!p||!c)return;gApply(p,c.lat,c.lng);save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is just below the map.',5000)},
+  gno(){const a=$('#gask');if(a)a.innerHTML=''},
+  async gsearch(){const p=S.places.get(ui.placeId),q=($('#gq')||{}).value;const out=$('#gres');if(!p||!out||!q||!q.trim())return;out.innerHTML='<span class="mono" style="color:var(--mute)">Searching Google…</span>';
+    try{await gmLoad();const {Place}=await google.maps.importLibrary('places');const r=await Place.searchByText({textQuery:q.trim(),fields:['displayName','location','formattedAddress'],locationBias:{center:{lat:p.lat,lng:p.lng},radius:20000},maxResultCount:6,language:'en'});
+      const list=ACT._gs=(r.places||[]).map(x=>({id:x.id,name:x.displayName||'',addr:x.formattedAddress||'',lat:x.location.lat(),lng:x.location.lng()}));const o=$('#gres');if(!o)return;
+      o.innerHTML=list.length?list.map((x,i)=>`<button class="sm nearb" data-act="gres" data-id="${i}"><b>${esc(x.name)}</b> <span>${esc(x.addr.split(',').slice(0,2).join(','))} · ${fmtD(dist(p.lat,p.lng,x.lat,x.lng))}</span></button>`).join(''):'<span class="mono" style="color:var(--mute)">Google found nothing by that name near here.</span>'}
+    catch(e){const o=$('#gres');if(o)o.innerHTML=`<span style="color:var(--rust);font-size:13px">The search did not work. ${esc(e&&e.message||'')}</span>`}},
+  gres(i){const x=(ACT._gs||[])[+i];if(!x)return;if(gMap){gMap.panTo({lat:x.lat,lng:x.lng});gMap.setZoom(18)}gPick(x.id)},
+  gsetup(){modal(`<h2>Pick places from Google, inside the app</h2><p style="margin:4px 0 0">With a Google Maps key the small map in each place becomes a live Google map. ${TAP} a hotel, restaurant or sight on it, or search by name, and the place takes Google’s name, exact pin, website and phone, with one-tap undo. No more opening Google Maps to copy things across.</p>
+    <h3>Get the key, once</h3><ol style="padding-left:20px;line-height:1.6;margin:4px 0;font-size:14px"><li>Go to <b>console.cloud.google.com/google/maps-apis</b> and sign in with your work Google account.</li><li>Create a project named <b>TravelDragonTrips</b> and add a billing card when asked. Google gives a free monthly allowance; you pay only beyond it.</li><li>Under <b>APIs &amp; Services</b>, enable <b>Maps JavaScript API</b> and <b>Places API (New)</b>.</li><li>Under <b>Keys &amp; Credentials</b>, create an <b>API key</b>.</li><li>Restrict it: <b>Websites</b> → add <span class="mono">${esc(location.protocol==='file:'?'https://wholejourneys.github.io/*':location.origin+'/*')}</span>; <b>API restrictions</b> → those two APIs.</li><li>Copy the key and paste it below.</li></ol>
+    ${location.protocol==='file:'?'<p style="color:var(--rust);font-size:14px">You have this open as a file. A key restricted to the web address will not work here, so on the Mac open the web address instead; Sync brings your places across.</p>':''}
+    <label class="f">Google Maps key</label><input id="gkeyIn" type="text" value="${esc(LS('tdt_gkey',''))}" placeholder="Starts with AIza" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <div class="mono" style="color:var(--mute);margin-top:6px">Kept on this device. Paste it once on each device you use.</div>
+    <div class="row wrap" style="justify-content:flex-end;margin-top:14px"><button data-act="closemodal">Close</button>${LS('tdt_gkey','')?'<button class="ghost danger" data-act="gdropkey">Remove the key</button>':''}<button class="primary" data-act="gsavekey">Save and reload</button></div>`)},
+  gsavekey(){const k=($('#gkeyIn').value||'').trim();if(!k){toast('Paste the key first');return}LSset('tdt_gkey',k);location.reload()},
+  gdropkey(){try{localStorage.removeItem('tdt_gkey')}catch(e){}location.reload()}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target&&e.target.id==='gq'){e.preventDefault();ACT.gsearch()}});
 
 /* ---------- start ---------- */
 (async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if(sess())queueSync(800);if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
