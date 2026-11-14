@@ -1120,7 +1120,7 @@ function askImport(files){files=files.filter(isMedia);if(!files.length){toast('N
 async function runImport(){runImport.nog=[];const files=askImport.files||[];let mapId=$('#impMap').value;const radius=+$('#impRad').value;settings.autoname=$('#impAuto').checked;
   if(mapId==='__new'){const m={id:uid(),name:$('#impName').value.trim()||'New map',desc:'',order:[],route:true,created:Date.now()};save('maps',m);mapId=m.id}
   modal(`<h2>Reading photos…</h2><progress id="impProg" max="${files.length}" value="0"></progress><div id="impMsg" class="mono" style="margin-top:8px"></div>`);
-  const keys=new Set([...S.photos.values()].map(p=>p.key));let added=0,dup=0,nogps=0;const touched=new Set(),fresh=[];
+  const keys=new Set([...S.photos.values()].map(p=>p.key));const idx=shotIndex();let added=0,dup=0,nogps=0;const touched=new Set(),fresh=[];
   for(let i=0;i<files.length;i++){const f=files[i];$('#impProg').value=i+1;$('#impMsg').textContent=`${i+1} of ${files.length} · ${f.name}`;
     const key=[f.name,f.size,f.lastModified].join('|');if(keys.has(key)){dup++;continue}keys.add(key);
     const video=isVideo(f);const meta=await readMeta(f,video)||{};
@@ -1128,7 +1128,8 @@ async function runImport(){runImport.nog=[];const files=askImport.files||[];let 
     const lat=typeof meta.latitude==='number'&&isFinite(meta.latitude)?meta.latitude:null,lng=typeof meta.longitude==='number'&&isFinite(meta.longitude)?meta.longitude:null;
     const ph={id:uid(),key,name:f.name,date,lat,lng,placeId:null,kind:video?'video':'image'};
     let tb=null;try{tb=video?await videoThumb(f):await imageThumb(f)}catch(e){}
-    if(tb)await putThumb(ph.id,tb);ph.thumb=!!tb;if(tb&&tb._m){ph.sharp=tb._m.sharp;ph.hash=tb._m.hash}
+    if(tb&&tb._m){ph.sharp=tb._m.sharp;ph.hash=tb._m.hash}if(d instanceof Date&&!isNaN(d)&&findTwin(idx,ph)){dup++;continue}
+    if(tb)await putThumb(ph.id,tb);ph.thumb=!!tb;addToIndex(idx,ph);
     if(lat!==null&&lng!==null&&!(lat===0&&lng===0)){let p=nearestPlace(lat,lng,radius);if(!p){p=newPlace(lat,lng,{maps:mapId?[mapId]:[],created:date});fresh.push(p.id)}else if(mapId&&!(p.maps||[]).includes(mapId)){p.maps=[...(p.maps||[]),mapId];save('places',p)}ph.placeId=p.id;touched.add(p.id)}else{nogps++;runImport.nog.push(ph.id)}
     save('photos',ph);added++;if(i%8===0)await sleep(0);
   }
@@ -1440,6 +1441,24 @@ window.addEventListener('drop',async e=>{if(inPageDrag)return;e.preventDefault()
 window.addEventListener('dragleave',()=>{dragN=Math.max(0,dragN-1);if(!dragN)$('#drop').style.display='none'});
 
 
+/* ---------- the same photo is never added twice ---------- */
+// A shot is identified by when it was taken (from the photo itself), its kind, and either its picture
+// fingerprint or its location. File name and file date are ignored, because Photos, the iPhone picker
+// and Finder all hand the same picture over with different ones.
+function sameShot(a,b){if(!a||!b||a.kind!==b.kind)return false;
+  if(a.hash&&b.hash&&!/^0+$/.test(a.hash)&&!/^0+$/.test(b.hash))return ham(a.hash,b.hash)<=10;
+  if(a.lat==null||b.lat==null)return a.lat==null&&b.lat==null;return dist(a.lat,a.lng,b.lat,b.lng)<30}
+function shotIndex(){const m=new Map();for(const p of S.photos.values()){if(!p.date)continue;const k=Math.floor(p.date/1000);(m.get(k)||m.set(k,[]).get(k)).push(p)}return m}
+function findTwin(idx,ph){const k=Math.floor(ph.date/1000);for(const kk of [k-1,k,k+1])for(const o of idx.get(kk)||[])if(o.id!==ph.id&&sameShot(o,ph))return o;return null}
+function addToIndex(idx,ph){const k=Math.floor(ph.date/1000);(idx.get(k)||idx.set(k,[]).get(k)).push(ph)}
+function keepScore(p){return (p.star?8:0)+(p.placeId?4:0)+(p.thumb?2:0)+(p.ai!==undefined?1:0)}
+function findDuplicates(){const groups=new Map();for(const p of S.photos.values()){if(!p.date)continue;const k=Math.floor(p.date/1000);(groups.get(k)||groups.set(k,[]).get(k)).push(p)}
+  const extra=[];const seen=new Set();for(const [k,list] of groups){const near=[...list,...(groups.get(k+1)||[])];for(const a of list){if(seen.has(a.id))continue;const twins=near.filter(b=>b!==a&&!seen.has(b.id)&&sameShot(a,b));if(!twins.length)continue;const all=[a,...twins].sort((x,y)=>keepScore(y)-keepScore(x));for(const x of all)seen.add(x.id);extra.push(...all.slice(1))}}return extra}
+let dupNoticeShown=false;
+function checkDuplicates(){const d=findDuplicates();if(!d.length||dupNoticeShown||$('#modal').style.display==='flex')return;dupNoticeShown=true;
+  modal(`<h2>${d.length} photo${d.length>1?'s are':' is'} in the app twice</h2><p>The same picture was added more than once, probably by dragging an album in again. Remove the extra copies? For each picture the copy with your star, place and preview is kept.</p><p style="color:var(--mute);font-size:14px">This only removes copies from this app. Nothing changes in your photo library.</p><div class="row wrap" style="justify-content:flex-end;margin-top:12px"><button data-act="closemodal">Not now</button><button class="primary" data-act="dedupe">Remove ${d.length} extra cop${d.length>1?'ies':'y'}</button></div>`)}
+ACT.dedupe=function(){const d=findDuplicates();for(const p of d)removePhoto(p.id);closeModal();render();toast(`Removed ${d.length} extra cop${d.length===1?'y':'ies'}. Your photo library is unchanged.`,6000)};
+
 /* ---------- phone: layout, location, sending files, merging ---------- */
 function setSize(s){document.body.classList.remove('sz-map','sz-list');if(s!=='split')document.body.classList.add('sz-'+s);ui.size=s;document.querySelectorAll('#sizer button').forEach(b=>b.classList.toggle('on',b.dataset.size===s));setTimeout(()=>map.invalidateSize(),80)}
 ui.size='split';
@@ -1477,14 +1496,15 @@ async function mergeBackup(j){const tomb=getTomb(),inT=j.tomb||{},stores=['place
 
 async function addToPlace(files,placeId){files=files.filter(isMedia);const p=S.places.get(placeId);if(!p||!files.length)return;
   modal(`<h2>Adding to ${esc(p.name)}…</h2><progress id="impProg" max="${files.length}" value="0"></progress><div id="impMsg" class="mono" style="margin-top:8px"></div>`);
-  const keys=new Set([...S.photos.values()].map(x=>x.key));let added=0,dup=0;
+  const keys=new Set([...S.photos.values()].map(x=>x.key));const idx=shotIndex();let added=0,dup=0;
   for(let i=0;i<files.length;i++){const f=files[i];$('#impProg').value=i+1;$('#impMsg').textContent=`${i+1} of ${files.length}`;
     const key=[f.name,f.size,f.lastModified].join('|');if(keys.has(key)){dup++;continue}keys.add(key);
     const video=isVideo(f);const meta=await readMeta(f,video)||{};const d=meta.DateTimeOriginal||meta.CreateDate||meta.ModifyDate;const date=d instanceof Date&&!isNaN(d)?d.getTime():(f.lastModified||Date.now());
     const lat=typeof meta.latitude==='number'&&isFinite(meta.latitude)?meta.latitude:null,lng=typeof meta.longitude==='number'&&isFinite(meta.longitude)?meta.longitude:null;
     const ph={id:uid(),key,name:f.name,date,lat,lng,placeId,kind:video?'video':'image'};
     let tb=null;try{tb=video?await videoThumb(f):await imageThumb(f)}catch(e){}
-    if(tb)await putThumb(ph.id,tb);ph.thumb=!!tb;if(tb&&tb._m){ph.sharp=tb._m.sharp;ph.hash=tb._m.hash}
+    if(tb&&tb._m){ph.sharp=tb._m.sharp;ph.hash=tb._m.hash}if(d instanceof Date&&!isNaN(d)&&findTwin(idx,ph)){dup++;continue}
+    if(tb)await putThumb(ph.id,tb);ph.thumb=!!tb;addToIndex(idx,ph);
     save('photos',ph);added++;if(i%8===0)await sleep(0)}
   closeModal();render();toast(`${added} added to ${p.name}`+(dup?` · ${dup} already here, skipped`:''),5000)}
 
@@ -1556,7 +1576,7 @@ async function syncNow(manual){if(!sess()){if(manual)ACT.sync();return}if(SYNC.b
   try{const s=await sbToken();
     if(LS('tdt_synced_as','')!==s.uid){for(const st of STORES4)for(const o of S[st].values())dirty[o.id]=st;for(const id of Object.keys(getTomb()))if(!dirty[id])dirty[id]='x';if(LS('tdt_gkey','')){if(!+LS('tdt_cfg_upd','0'))LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg'}LSset('tdt_cursor','0');LSset('tdt_thup','');LSset('tdt_thwant','');LSset('tdt_synced_as',s.uid);persistDirty()}
     const got=await syncPull(s),sent=await syncPush(s),th=await syncThumbs(s);
-    LSset('tdt_lastsync',String(Date.now()));setSyncMsg('');if(got||th)softRender();if(manual)toast(`Synced: ${sent} sent, ${got} received`,5000)}
+    LSset('tdt_lastsync',String(Date.now()));setSyncMsg('');if(got||th)softRender();if(got)setTimeout(checkDuplicates,800);if(manual)toast(`Synced: ${sent} sent, ${got} received`,5000)}
   catch(e){setSyncMsg(navigator.onLine===false?'Offline. Changes are kept here and sent when you are back online.':'Sync did not finish: '+(e.message||e));if(manual)toast(SYNC.msg,8000)}
   SYNC.busy=false;if(SYNC.again){SYNC.again=false;queueSync(1500)}}
 
@@ -1664,7 +1684,7 @@ Object.assign(ACT,{
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target&&e.target.id==='gq'){e.preventDefault();ACT.gsearch()}});
 
 /* ---------- start ---------- */
-(async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if(sess())queueSync(800);if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
+(async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if(sess())queueSync(800);setTimeout(checkDuplicates,1500);if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
 </script>
 </body>
 </html>
