@@ -963,7 +963,7 @@ map.on('click',e=>{
   if(!ui.mode)return;const {lat,lng}=e.latlng;const md=ui.mode;setMode(null);
   if(md.kind==='move'){const p=S.places.get(md.id);if(p){p.lat=lat;p.lng=lng;save('places',p);drawPins();toast('Pin moved')}}
   else if(md.kind==='new'){const p=newPlace(lat,lng,{});openPlace(p.id);queueGeocode(p.id)}
-  else if(md.kind==='photos'){let p=nearestPlace(lat,lng,150)||newPlace(lat,lng,{});for(const id of ui.sel){const ph=S.photos.get(id);if(ph){ph.placeId=p.id;ph.lat=lat;ph.lng=lng;save('photos',ph)}}ui.sel.clear();openPlace(p.id);queueGeocode(p.id)}
+  else if(md.kind==='photos'){let p=nearestPlace(lat,lng,150)||newPlace(lat,lng,{});for(const id of ui.sel){const ph=S.photos.get(id);if(ph){ph.placeId=p.id;ph.lat=lat;ph.lng=lng;ph.byTime=false;save('photos',ph)}}ui.sel.clear();openPlace(p.id);queueGeocode(p.id)}
 });
 function setMode(m,text){ui.mode=m;$('#hint').style.display=m?'block':'none';$('#hint').textContent=text||'';$('#map').style.cursor=m?'crosshair':''}
 
@@ -1126,16 +1126,17 @@ async function runImport(){runImport.nog=[];const files=askImport.files||[];let 
     const video=isVideo(f);const meta=await readMeta(f,video)||{};
     const d=meta.DateTimeOriginal||meta.CreateDate||meta.ModifyDate;const date=d instanceof Date&&!isNaN(d)?d.getTime():f.lastModified;
     const lat=typeof meta.latitude==='number'&&isFinite(meta.latitude)?meta.latitude:null,lng=typeof meta.longitude==='number'&&isFinite(meta.longitude)?meta.longitude:null;
-    const ph={id:uid(),key,name:f.name,date,lat,lng,placeId:null,kind:video?'video':'image'};
+    const ph={id:uid(),key,name:f.name,date,lat,lng,placeId:null,kind:video?'video':'image',dt:d instanceof Date&&!isNaN(d)?1:0};
     let tb=null;try{tb=video?await videoThumb(f):await imageThumb(f)}catch(e){}
     if(tb&&tb._m){ph.sharp=tb._m.sharp;ph.hash=tb._m.hash}if(d instanceof Date&&!isNaN(d)&&findTwin(idx,ph)){dup++;continue}
     if(tb)await putThumb(ph.id,tb);ph.thumb=!!tb;addToIndex(idx,ph);
     if(lat!==null&&lng!==null&&!(lat===0&&lng===0)){let p=nearestPlace(lat,lng,radius);if(!p){p=newPlace(lat,lng,{maps:mapId?[mapId]:[],created:date});fresh.push(p.id)}else if(mapId&&!(p.maps||[]).includes(mapId)){p.maps=[...(p.maps||[]),mapId];save('places',p)}ph.placeId=p.id;touched.add(p.id)}else{nogps++;runImport.nog.push(ph.id)}
     save('photos',ph);added++;if(i%8===0)await sleep(0);
   }
+  const timed=nogps?placeByTime(runImport.nog.map(id=>S.photos.get(id)).filter(Boolean)):[];if(timed.length){ACT._timed=timed.map(x=>x.id);nogps-=timed.length;runImport.nog=runImport.nog.filter(id=>!ACT._timed.includes(id));timed.forEach(x=>touched.add(x.placeId))}
   closeModal();ui.placeId=null;if(mapId){ui.mapId=mapId;ui.tab='maps'}else if(nogps&&!touched.size){ui.tab='photos';ui.photoFilter='unplaced'}
   render(true);fresh.forEach(queueGeocode);
-  toast(`${added} added to ${touched.size} place${touched.size===1?'':'s'}`+(dup?` · ${dup} already here, skipped`:'')+(nogps?` · ${nogps} without location (see Photos → No location)`:''),7000);if(nogps&&TOUCH)noGpsHelp(nogps,added);
+  toast(`${added} added to ${touched.size} place${touched.size===1?'':'s'}`+(timed.length?` · ${timed.length} placed by the time they were taken (marked “by time”)`:'')+(dup?` · ${dup} already here, skipped`:'')+(nogps?` · ${nogps} without location (see Photos → No location)`:''),9000);if(nogps&&TOUCH)noGpsHelp(nogps,added);
 }
 
 /* ---------- posts ---------- */
@@ -1186,7 +1187,7 @@ async function importBackup(file){try{const j=JSON.parse(await file.text());if(j
 /* ---------- rendering ---------- */
 function coverImg(p){const ph=bestFirst(photosOf(p.id)).find(x=>x.thumb);return ph?`<img class="cover" data-th="${ph.id}" alt="">`:`<div class="dot" style="--c:${placeColor(p)}"></div>`}
 function placeCard(p,n){const k=photosOf(p.id).length;return `<div class="card" data-act="place" data-id="${p.id}">${n?`<div class="dot" style="--c:${placeColor(p)}">${n}</div>`:''}${n&&!photosOf(p.id).some(x=>x.thumb)?'':coverImg(p)}<div class="grow"><div class="t">${esc(p.name)}</div><div class="s">${esc((TYPES[p.type]||TYPES.other)[0])}${placeLine(p)?' · '+esc(placeLine(p)):''}${k?' · '+k+' photo'+(k>1?'s':''):''}${isRough(p)?' · <span style="color:var(--rust)">needs a name</span>':''}</div></div></div>`}
-function phTile(ph){return `<div class="ph${ui.sel.has(ph.id)?' sel':''}" data-act="photo" data-id="${ph.id}" title="${esc(ph.name)} · ${fmtDate(ph.date)}">${ph.thumb?`<img data-th="${ph.id}" alt="" loading="lazy">`:`<div class="mono" style="padding:6px;word-break:break-all">${esc(ph.name)}</div>`}${ph.kind==='video'?'<span class="v">video</span>':''}${ph.placeId?'':'<span class="nog">no location</span>'}${ph.star||ph.ai?`<span class="st"${ph.star?'':' style="background:#fffd"'}>${ph.star?'★':''}${ph.ai?(ph.star?' ':'')+ph.ai:''}</span>`:''}</div>`}
+function phTile(ph){return `<div class="ph${ui.sel.has(ph.id)?' sel':''}" data-act="photo" data-id="${ph.id}" title="${esc(ph.name)} · ${fmtDate(ph.date)}">${ph.thumb?`<img data-th="${ph.id}" alt="" loading="lazy">`:`<div class="mono" style="padding:6px;word-break:break-all">${esc(ph.name)}</div>`}${ph.kind==='video'?'<span class="v">video</span>':''}${ph.placeId?(ph.byTime?'<span class="nog" style="background:#8a6d1f">by time</span>':''):'<span class="nog">no location</span>'}${ph.star||ph.ai?`<span class="st"${ph.star?'':' style="background:#fffd"'}>${ph.star?'★':''}${ph.ai?(ph.star?' ':'')+ph.ai:''}</span>`:''}</div>`}
 
 function vMaps(){
   if(ui.mapId&&S.maps.get(ui.mapId)){const m=S.maps.get(ui.mapId);const ps=visiblePlaces();
@@ -1214,14 +1215,14 @@ function photoList(){let ps=[...S.photos.values()].sort((a,b)=>b.date-a.date);
   if(ui.inView){const b=map.getBounds();ps=ps.filter(p=>{const pl=p.placeId&&S.places.get(p.placeId);return pl&&b.contains([pl.lat,pl.lng])})}
   if(ui.q){const q=ui.q.toLowerCase();ps=ps.filter(p=>{const pl=p.placeId&&S.places.get(p.placeId);return (p.name+' '+(pl?pl.name+' '+pl.locality+' '+pl.country:'')).toLowerCase().includes(q)})}
   return ps}
-function vPhotos(){const base=photoList();const f=ui.photoFilter;const cnt={all:base.length,unplaced:base.filter(p=>!p.placeId).length,best:base.filter(p=>p.star).length};cnt.rest=cnt.all-cnt.best;
-  const ps=f==='unplaced'?base.filter(p=>!p.placeId):f==='best'?base.filter(p=>p.star):f==='rest'?base.filter(p=>!p.star):base;
+function vPhotos(){const base=photoList();const f=ui.photoFilter;const cnt={all:base.length,unplaced:base.filter(p=>!p.placeId).length,best:base.filter(p=>p.star).length,bytime:base.filter(p=>p.byTime).length};cnt.rest=cnt.all-cnt.best;
+  const ps=f==='unplaced'?base.filter(p=>!p.placeId):f==='bytime'?base.filter(p=>p.byTime):f==='best'?base.filter(p=>p.star):f==='rest'?base.filter(p=>!p.star):base;
   const shown=ps.slice(0,ui.photoLimit);const chip=(id,label)=>`<span class="chip${f===id?' on':''}" data-act="pf" data-id="${id}">${label} ${cnt[id]}</span>`;
-  return `<div class="chips">${chip('all','All')}${chip('best','★ Best')}${chip('rest','Not best')}${chip('unplaced','No location')}</div>
+  return `<div class="chips">${chip('all','All')}${chip('best','★ Best')}${chip('rest','Not best')}${chip('unplaced','No location')}${cnt.bytime||f==='bytime'?chip('bytime','By time'):''}</div>
   <div class="chips"><span class="chip${ui.inView?' on':''}" data-act="inview" title="Zoom the map to an area, then turn this on">Only what the map shows</span><span class="chip${ui.selMode?' on':''}" data-act="selmode">Select several</span></div>
   ${ui.sel.size?`<div class="row wrap" style="margin-bottom:10px"><b>${ui.sel.size} selected</b><button class="sm" data-act="starsel">★ Best</button><button class="primary sm" data-act="placesel">Pin on map</button><button class="sm danger" data-act="delsel">Remove</button><button class="sm ghost" data-act="clearsel">Clear</button></div>`
-   :`<div class="row wrap" style="margin-bottom:10px">${ps.length>1?`<button class="sm dark" data-act="bestlist">Suggest the best of these ${ps.length}</button>`:''}${ps.length?`<button class="sm" data-act="ailist" title="Uses Google Gemini with your own key">Rate with AI</button>`:''}${f==='rest'&&ps.length?`<button class="sm danger" data-act="delrest">Remove all ${ps.length} shown</button>`:''}</div>`}
-  ${ps.length?`<div style="color:var(--mute);font-size:13px;margin-bottom:8px">${ui.selMode?'Click photos to select them.':f==='unplaced'?'Click the photos that belong together, then Pin on map.':'Click a photo to look through them one by one, mark the best and remove the rest.'}</div>`:''}
+   :`<div class="row wrap" style="margin-bottom:10px">${ps.length>1?`<button class="sm dark" data-act="bestlist">Suggest the best of these ${ps.length}</button>`:''}${ps.length?`<button class="sm" data-act="ailist" title="Uses Google Gemini with your own key">Rate with AI</button>`:''}${f==='unplaced'&&ps.length?`<button class="sm primary" data-act="timeplace">Place these by the time they were taken</button>`:''}${f==='bytime'&&ps.length?`<button class="sm primary" data-act="okbytime">They look right</button>`:''}${f==='rest'&&ps.length?`<button class="sm danger" data-act="delrest">Remove all ${ps.length} shown</button>`:''}</div>`}
+  ${ps.length?`<div style="color:var(--mute);font-size:13px;margin-bottom:8px">${ui.selMode?'Click photos to select them.':f==='unplaced'?'Most can be placed by time: each goes to the place of the photo you took closest in time. Pin the rest by hand: select the ones that belong together, then Pin on map.':f==='bytime'?'Each was placed with the photo you took closest in time. Open one to see its place; select any that are wrong and Pin on map.':'Click a photo to look through them one by one, mark the best and remove the rest.'}</div>`:''}
   <div class="strip g3">${shown.map(phTile).join('')}</div>
   ${ps.length>shown.length?`<button style="width:100%;margin-top:10px" data-act="morephotos">Show more (${ps.length-shown.length})</button>`:''}
   ${ps.length?'':`<div class="empty">No photos here${ui.inView?' in this part of the map':''}.</div>`}`}
@@ -1423,7 +1424,7 @@ document.addEventListener('input',e=>{const el=e.target;
 document.addEventListener('change',e=>{const el=e.target;
   if(el.id==='file'){askImport([...el.files]);el.value='';return}
   if(el.id==='restore'){if(el.files[0])importBackup(el.files[0]);el.value='';return}
-  if(el.id==='moveSel'&&el.value){for(const id of ui.psel){const ph=S.photos.get(id);if(ph){ph.placeId=el.value;save('photos',ph)}}const n=ui.psel.size;ui.split=false;ui.psel=new Set();if(!photosOf(ui.placeId).length){toast('Moved '+n+'. This place has no photos left; delete it if you no longer need it.',6000)}else toast('Moved '+n);render();return}
+  if(el.id==='moveSel'&&el.value){for(const id of ui.psel){const ph=S.photos.get(id);if(ph){ph.placeId=el.value;ph.byTime=false;save('photos',ph)}}const n=ui.psel.size;ui.split=false;ui.psel=new Set();if(!photosOf(ui.placeId).length){toast('Moved '+n+'. This place has no photos left; delete it if you no longer need it.',6000)}else toast('Moved '+n);render();return}
   if(el.id==='mergeSel'&&el.value){const from=ui.placeId,to=el.value;mergePlace(from,to);toast('Merged');openPlace(to);return}
   if(el.dataset.link!==undefined){const p=S.places.get(ui.placeId);const l=p.links[+el.dataset.link];if(el.type==='checkbox')l.priv=el.checked;else{if(el.dataset.k==='url'&&el.value&&!/^https?:\/\//i.test(el.value))el.value='https://'+el.value;l[el.dataset.k]=el.value}save('places',p);if(el.dataset.k==='url')render();return}
   if(el.dataset.f==='info.website'&&el.value&&!/^https?:\/\//i.test(el.value))el.value='https://'+el.value.trim();
@@ -1508,6 +1509,22 @@ async function addToPlace(files,placeId){files=files.filter(isMedia);const p=S.p
     save('photos',ph);added++;if(i%8===0)await sleep(0)}
   closeModal();render();toast(`${added} added to ${p.name}`+(dup?` · ${dup} already here, skipped`:''),5000)}
 
+/* Photos with no location go to the place of the photo taken closest in time,
+   if that photo was taken within TIMEWIN minutes. Marked byTime so they can be checked or undone. */
+const TIMEWIN=90;
+function placeByTime(list){const placed=[...S.photos.values()].filter(x=>x.placeId&&!x.byTime&&x.date&&x.dt!==0&&S.places.has(x.placeId)).sort((a,b)=>a.date-b.date);
+  if(!placed.length)return[];const ds=placed.map(x=>x.date),out=[];
+  for(const ph of list){if(!ph||ph.placeId||!ph.date||ph.dt===0)continue;
+    let lo=0,hi=ds.length;while(lo<hi){const m=(lo+hi)>>1;if(ds[m]<ph.date)lo=m+1;else hi=m}
+    const cand=[placed[lo-1],placed[lo]].filter(Boolean).map(x=>({x,gap:Math.abs(x.date-ph.date)})).sort((a,b)=>a.gap-b.gap)[0];
+    if(!cand||cand.gap>TIMEWIN*60000)continue;
+    ph.placeId=cand.x.placeId;ph.byTime=true;ph.byGap=Math.round(cand.gap/60000);save('photos',ph);out.push(ph)}
+  return out}
+function timeReport(list){const n=list.length,places=new Set(list.map(x=>x.placeId)).size;
+  modal(`<h2>${n} photo${n===1?'':'s'} placed by time</h2><p>Each went to the place of the photo you took closest in time${n?`, into ${places} place${places===1?'':'s'}`:''}. They are marked <b>by time</b>; check them under Photos → By time.</p>
+  <p style="color:var(--mute);font-size:14px">Photos with no shot within ${TIMEWIN} minutes either side stay under No location, for pinning by hand.</p>
+  <div class="row wrap" style="justify-content:flex-end"><button class="danger" data-act="undotime">Undo</button><button data-act="showtime">Check them</button><button class="primary" data-act="closemodal">OK</button></div>`)}
+
 function noGpsHelp(n,total){$('#toast').style.display='none';modal(`<h2>${n} of ${total} arrived without a location</h2>
   <p>${IOS?'The iPhone leaves the location out unless you allow it. When you choose photos, tap <b>Options</b> in the photo picker and switch <b>Location</b> on, then choose them again. Photos taken through “Take Photo” inside this app never carry a location, so use the Camera app first.':'Your phone left the location out of these files.'}</p>
   <p style="color:var(--mute)">For now they sit under Photos → No location, where you can pin them by hand.</p>
@@ -1536,6 +1553,10 @@ Object.assign(ACT,{
   gshow(){ui.gshow=true;render()},
   sharefile(){const f=deliver.file;if(!f)return;navigator.share({files:[f]}).then(()=>{closeModal();toast('Sent')}).catch(e=>{if(e&&e.name!=='AbortError')toast('Sharing did not work here. Use Download instead.',6000)})},
   dlfile(){if(deliver.file){download(deliver.file.name,deliver.blob);closeModal()}},
+  timeplace(){const base=photoList().filter(p=>!p.placeId);const done=placeByTime(base);ACT._timed=done.map(x=>x.id);render();if(!done.length){toast(`None of these was taken within ${TIMEWIN} minutes of a photo that has a location. Pin them by hand.`,8000);return}timeReport(done)},
+  undotime(){let n=0;for(const id of ACT._timed||[]){const ph=S.photos.get(id);if(ph&&ph.byTime){ph.placeId=null;ph.byTime=false;delete ph.byGap;save('photos',ph);n++}}ACT._timed=[];closeModal();render();toast(`Undone: ${n} back under No location.`)},
+  showtime(){closeModal();ui.tab='photos';ui.placeId=null;ui.mapId=null;ui.photoFilter='bytime';render()},
+  okbytime(){let n=0;for(const p of photoList().filter(x=>x.byTime)){p.byTime=false;delete p.byGap;save('photos',p);n++}render();toast(`${n} confirmed.`)},
   shownogps(){closeModal();ui.tab='photos';ui.placeId=null;ui.mapId=null;ui.photoFilter='unplaced';render()},
   delnogps(){for(const id of runImport.nog||[]){const ph=S.photos.get(id);if(ph&&!ph.placeId)removePhoto(id)}runImport.nog=[];closeModal();render();toast('Removed. Add them again with Location switched on in the picker.',7000)},
   backup(){const last=LS('tdt_lastbackup','');modal(`<h2>Backup and transfer</h2><p style="color:var(--mute);margin:4px 0 0">A backup file is a spare copy of everything in the app that you keep yourself. ${sess()?'Sync is on, so your devices already keep each other up to date.':'To keep phone and Mac in step automatically, use <a href="#" data-act="sync">Sync</a> instead.'}</p>
