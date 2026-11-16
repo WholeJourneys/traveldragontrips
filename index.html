@@ -676,6 +676,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 		}
 	}
 .offpick{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
+.pickwrap{position:relative;display:inline-block;overflow:hidden;border-radius:8px}.pickwrap input[type=file]{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;margin:0;padding:0;border:0;cursor:pointer;font-size:0}
 </style>
 <style>
 :root{--pine:#1d3b2a;--pine2:#2f5a41;--moss:#4f7a3a;--gorse:#f2b705;--chalk:#f7f4ec;--paper:#fffdf8;--ink:#1b1f1c;--mute:#6d6a5f;--line:#ddd6c6;--rust:#b4512d}
@@ -1211,6 +1212,8 @@ async function runEnrich(){if(enBusy)return;enBusy=true;let ch=false;while(enQ.l
 async function backfillAreas(){const todo=[...S.places.values()].filter(p=>p.region===undefined);let ch=false;for(const p of todo){try{const pr=await reverse(p.lat,p.lng);p.region=(pr&&pr.county)||'';p.state=(pr&&pr.state)||'';if(pr&&!p.locality)p.locality=pr.city||pr.town||pr.village||'';if(pr&&!p.country)p.country=pr.country||'';save('places',p);ch=true}catch(e){break}await sleep(700)}if(ch)softRender()}
 
 /* ---------- photo import ---------- */
+const pickBtn=(kind,label)=>TOUCH?`<span class="pickwrap"><button class="primary" type="button" tabindex="-1">${label}</button><input type="file" multiple accept="image/*,video/*" data-pick="${kind}" aria-label="${label}"></span>`:`<button class="primary" data-act="${kind==='here'?'pickhere':'pick2'}">${label}</button>`;
+function pickNote(n){if(IOS&&n===1)setTimeout(()=>toast('The iPhone handed over 1 photo. To add several at once: tap each photo so it gets a tick, then tap Add or Done at the top right of the photo screen.',12000),5200)}
 function pickMany(sel){const el=$(sel);el.multiple=true;el.setAttribute('multiple','');el.removeAttribute('capture');el.value='';el.click()}
 function isMedia(f){return /^image\/|^video\//.test(f.type)||/\.(jpe?g|png|heic|heif|webp|tiff?|mov|mp4|m4v)$/i.test(f.name)}
 function isVideo(f){return /^video\//.test(f.type)||/\.(mov|mp4|m4v)$/i.test(f.name)}
@@ -1433,7 +1436,7 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   ${isPlan(p)?`<div class="tip" style="margin:10px 0 0">Planned stop${p.planDay?' · '+esc(p.planDay):''}. Not visited yet: a photo, a note or a rating marks it visited.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="went">I went</button><button class="sm danger ghost" data-act="nogo" data-id="${p.id}">Didn’t go: remove</button></div></div>`:''}
   <div class="row wrap" style="margin-top:10px;gap:10px"><div class="stars" role="group" aria-label="My rating">${[1,2,3,4,5].map(n=>`<button class="${(p.stars||0)>=n?'on':''}" data-act="stars" data-id="${n}" aria-label="${n} star${n>1?'s':''}">★</button>`).join('')}</div><div class="chips" style="margin:0">${Object.entries(VERD).map(([k,v])=>`<span class="chip${p.verdict===k?' on':''}" data-act="verdict" data-id="${k}">${v[0]}</span>`).join('')}</div></div>
   <input type="text" value="${esc(p.bestFor||'')}" data-f="bestFor" data-store="places" data-id="${p.id}" placeholder="Best for… e.g. active couples, women’s groups, a rest day" style="margin-top:8px" aria-label="Best for">
-  <div class="row wrap" style="margin-top:8px"><button class="primary" data-act="pickhere">+ Add photos to this place</button></div>
+  <div class="row wrap" style="margin-top:8px">${pickBtn('here','+ Add photos to this place')}</div>
   ${TOUCH?`<div class="mono" style="color:var(--mute);margin-top:4px">Take pictures with the Camera app first, then add them here from your library, so the originals stay in your photos.</div>`:''}
   ${phs.length?`<div class="row" style="margin-top:18px"><h3 class="grow" style="margin:0">${phs.length} photo${phs.length>1?'s':''}</h3>${phs.length>1&&!ui.split?`<button class="sm" data-act="bestplace">Pick best</button>`:''}${phs.length>1?`<button class="sm${ui.split?' dark':''}" data-act="splitmode">${ui.split?'Done':'Separate photos'}</button>`:''}</div>
   ${ui.split?`<div class="private" style="border:1px solid #e6cfae;border-radius:8px;padding:8px;margin:6px 0"><div style="font-size:13px;margin-bottom:6px">Tick the photos that belong somewhere else, then choose where they go.</div><div class="row wrap"><button class="sm primary" data-act="splitnew" ${psel.size?'':'disabled'}>Move ${psel.size||''} to a new place</button>${others.length?`<select id="moveSel" style="width:auto;max-width:170px" ${psel.size?'':'disabled'} aria-label="Move to existing place"><option value="">Move to…</option>${others.map(([d,o])=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>`:''}<button class="sm" data-act="spliteach">One place per photo</button></div></div>`:''}
@@ -1487,7 +1490,7 @@ function render(fit){
 
 /* ---------- events ---------- */
 const ACT={
-  pick(){if(IOS&&LS('tdt_picktip','1')!=='0'){modal(`<h2>Before you choose photos</h2><p>In the photo picker, tap <b>Options</b> and switch <b>Location</b> on. Without it the iPhone hands photos over with no place attached.</p><p style="color:var(--mute)">Big batches are fine. Videos take longer because the iPhone prepares each one first.</p><label class="row" style="margin:10px 0"><input type="checkbox" id="pickTip"> Don’t show this again</label><div class="row" style="justify-content:flex-end"><button data-act="closemodal">Cancel</button><button class="primary" data-act="pick2">Choose photos</button></div>`);return}pickMany('#file')},
+  pick(){if(TOUCH){const tip=IOS&&LS('tdt_picktip','1')!=='0';modal(`<h2>${tip?'Before you choose photos':'Choose photos'}</h2>${tip?'<p>In the photo picker, tap <b>Options</b> and switch <b>Location</b> on. Without it the iPhone hands photos over with no place attached.</p>':''}<p style="color:var(--mute)">Choose <b>Photo Library</b>, tap every photo you want so each gets a tick, then tap <b>Add</b> at the top right. Big batches are fine. Videos take longer because the ${IOS?'iPhone':'phone'} prepares each one first.</p>${tip?'<label class="row" style="margin:10px 0"><input type="checkbox" id="pickTip"> Don’t show the Location reminder again</label>':''}<div class="row" style="justify-content:flex-end"><button data-act="closemodal">Cancel</button>${pickBtn('all','Choose photos')}</div>`);return}pickMany('#file')},
   pick2(){if($('#pickTip')&&$('#pickTip').checked)LSset('tdt_picktip','0');closeModal();pickMany('#file')},
   closemodal:closeModal,
   startimport:runImport,
@@ -1649,6 +1652,7 @@ document.addEventListener('input',e=>{const el=e.target;
   if(el.dataset.link!==undefined&&el.type!=='checkbox'){const p=S.places.get(ui.placeId);p.links[+el.dataset.link][el.dataset.k]=el.value;save('places',p)}
 });
 document.addEventListener('change',e=>{const el=e.target;
+  if(el.dataset&&el.dataset.pick){const fs=[...el.files],kind=el.dataset.pick;el.value='';if(!fs.length)return;pickNote(fs.length);if(kind==='here')addToPlace(fs,ui.placeId);else{if($('#pickTip')&&$('#pickTip').checked)LSset('tdt_picktip','0');closeModal();askImport(fs)}return}
   if(el.id==='file'){askImport([...el.files]);el.value='';return}
   if(el.id==='fileDoc'){const f=el.files[0];el.value='';if(f){const n=$('#itName');if(n&&$('#modal').style.display!=='none'){askItin.file=f;n.textContent=f.name;$('#itMsg').textContent=''}else askItin(f)}return}
   if(el.id==='restore'){if(el.files[0])importBackup(el.files[0]);el.value='';return}
@@ -1737,7 +1741,7 @@ async function addToPlace(files,placeId){files=files.filter(isMedia);const p=S.p
     if(tb&&tb._m){ph.sharp=tb._m.sharp;ph.hash=tb._m.hash}if(d instanceof Date&&!isNaN(d)&&findTwin(idx,ph)){dup++;continue}
     if(tb)await putThumb(ph.id,tb);ph.thumb=!!tb;addToIndex(idx,ph);
     save('photos',ph);added++;if(i%8===0)await sleep(0)}
-  closeModal();render();toast(`${added} added to ${p.name}`+(dup?` · ${dup} already here, skipped`:''),5000)}
+  closeModal();render();toast(`${files.length} chosen · ${added} added to ${p.name}`+(dup?` · ${dup} already here, skipped`:''),5000)}
 
 /* Photos with no location go to the place of the photo taken closest in time,
    if that photo was taken within TIMEWIN minutes. Marked byTime so they can be checked or undone. */
