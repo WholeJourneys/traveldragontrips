@@ -675,6 +675,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 		print-color-adjust: exact;
 		}
 	}
+.offpick{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
 </style>
 <style>
 :root{--pine:#1d3b2a;--pine2:#2f5a41;--moss:#4f7a3a;--gorse:#f2b705;--chalk:#f7f4ec;--paper:#fffdf8;--ink:#1b1f1c;--mute:#6d6a5f;--line:#ddd6c6;--rust:#b4512d}
@@ -874,8 +875,8 @@ aside,header{min-width:0}
   <button class="deskonly" data-act="sync">Sync</button>
   <button class="deskonly" data-act="backup">Backup</button>
   <button class="phoneonly" data-act="more" aria-label="More">&#8943;</button>
-  <input id="file" type="file" multiple accept="image/*,video/*,.heic,.heif,.mov" hidden>
-  <input id="fileHere" type="file" multiple accept="image/*,video/*" hidden>
+  <input id="file" type="file" multiple accept="image/*,video/*" class="offpick" tabindex="-1" aria-hidden="true">
+  <input id="fileHere" type="file" multiple accept="image/*,video/*" class="offpick" tabindex="-1" aria-hidden="true">
   <input id="fileDoc" type="file" accept=".pdf,.docx,.eml,.txt,.htm,.html,application/pdf,text/plain" hidden>
   <input id="restore" type="file" accept=".json,application/json" hidden>
 </header>
@@ -992,11 +993,11 @@ async function itinAI(key,doc){const parts=[{text:ITIN_PROMPT}];for(const p of d
       catch(e){err='Gemini’s answer could not be read. Try again.'}}}
   throw new Error(err||'None of the Gemini models are available to this key.')}
 async function photonFind(q,c){try{const r=await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1&lang=en${c?`&lat=${c.lat}&lon=${c.lng}`:''}`);return ((await r.json()).features||[])[0]||null}catch(e){return null}}
-async function itinLookup(stops,msg){let G=null;if(gKey()&&/^https?:/.test(location.protocol)){try{await gmLoad();G=(await google.maps.importLibrary('places')).Place}catch(e){G=null}}
+async function itinLookup(stops,msg){let G=null,gOk=false,gErr='';itinLookup.note='';if(gKey()&&/^https?:/.test(location.protocol)){try{await gmLoad();G=(await google.maps.importLibrary('places')).Place}catch(e){G=null;gErr=String(e&&e.message||e)}}
   const good=[],centre=()=>good.length?{lat:med(good.map(h=>h.lat)),lng:med(good.map(h=>h.lng))}:null;
   for(const [i,s] of stops.entries()){msg(`Finding place ${i+1} of ${stops.length} on the map…`);const q=s.q||[s.name,s.town,s.country].filter(Boolean).join(', '),c=centre();s.hit=null;
-    if(G){try{const req={textQuery:q,fields:['displayName','location','formattedAddress','types','primaryType','googleMapsURI'],maxResultCount:1,language:'en'};if(c)req.locationBias={center:c,radius:50000};
-      const x=((await G.searchByText(req)).places||[])[0];if(x&&x.location)s.hit={lat:x.location.lat(),lng:x.location.lng(),name:x.displayName||s.name,addr:x.formattedAddress||'',gid:x.id,url:x.googleMapsURI||'',gtype:gType([x.primaryType,...(x.types||[])].filter(Boolean)),src:'Google'}}catch(e){}}
+    if(G){try{const req={textQuery:q,fields:['displayName','location','formattedAddress','types','primaryType','googleMapsURI','websiteURI','internationalPhoneNumber','nationalPhoneNumber'],maxResultCount:1,language:'en'};if(c)req.locationBias={center:c,radius:50000};
+      const x=((await G.searchByText(req)).places||[])[0];gOk=true;if(x&&x.location)s.hit={lat:x.location.lat(),lng:x.location.lng(),name:x.displayName||s.name,addr:x.formattedAddress||'',gid:x.id,url:x.googleMapsURI||'',web:x.websiteURI||'',phone:x.internationalPhoneNumber||x.nationalPhoneNumber||'',gtype:gType([x.primaryType,...(x.types||[])].filter(Boolean)),src:'Google'}}catch(e){gErr=String(e&&e.message||e)}}
     if(!s.hit){const f=await photonFind(q,c);if(f){const pr=f.properties,[lng,lat]=f.geometry.coordinates,area=pr.osm_key==='place'||pr.osm_key==='boundary',like=plain(s.name).split(/[^a-z0-9]+/).filter(w=>w.length>3).some(w=>plain(pr.name).includes(w));
         if(pr.name&&like&&(!area||!s.town||plain(s.name)===plain(pr.name)))s.hit={lat,lng,name:s.name,addr:[pr.name,pr.city||pr.town||pr.village||pr.county,pr.country].filter(Boolean).join(', '),pr,src:'map'}}
       if(!G)await sleep(300)}
@@ -1008,6 +1009,7 @@ async function itinLookup(stops,msg){let G=null;if(gKey()&&/^https?:/.test(locat
     if(h.src==='Google'&&!wl(s.name,h.name)&&!wl(h.name,s.name))h.doubt='Listed as “'+s.name+'”, but the closest match has a different name.';
     else if(s.country&&h.addr&&!plain(h.addr).includes(plain(s.country)))h.doubt='The match is not in '+s.country+'.';else if(c&&good.length>=4&&dist(c.lat,c.lng,h.lat,h.lng)>500000)h.doubt='The match is far from the other stops.';
     if(!h.approx){const twin=seen.find(t=>(h.gid&&t.hit.gid===h.gid)||dist(t.hit.lat,t.hit.lng,h.lat,h.lng)<40);if(twin){twin.note=[twin.note,[s.day,s.note].filter(Boolean).join(' — ')].filter(Boolean).join('; also ');s.dup=true;continue}seen.push(s);s.ex=nearestPlace(h.lat,h.lng,60)}}
+  itinLookup.note=!gKey()?'No Google Maps key is saved on this device, so pins come from the open map and have no Google link, website or phone. Add the key under More, then import again.':location.protocol==='file:'?'Google only works from the web address, so pins come from the open map.':(!G||!gOk)?'Google could not be reached'+(gErr?' ('+gErr.slice(0,140)+')':'')+', so pins come from the open map and have no Google link, website or phone.':'';
   return stops.filter(s=>!s.dup)}
 function askItin(file){askItin.file=file||null;
   modal(`<h2>Add places from an itinerary</h2><p style="color:var(--mute);margin:4px 0 0">Give it a fam or trip itinerary and each hotel, restaurant, sight and walk becomes a planned pin on a new map, ready for your photos and notes.</p>
@@ -1031,9 +1033,9 @@ async function runItin(){const key=$('#itKey').value.trim(),txt=$('#itText').val
   catch(e){msg(String(e&&e.message||e))}finally{runItin.busy=false}}
 function itinReview(trip,stops){ACT._it={trip,stops};const ok=stops.filter(s=>s.hit),ap=ok.filter(s=>s.hit.approx).length,miss=stops.length-ok.length;
   modal(`<h2>Check the places</h2><label class="f">Name for the new map</label><input id="itMap" type="text" value="${esc(trip)}">
-  <p class="mono" style="color:var(--mute);margin-top:8px">${ok.length} found${ap?' · '+ap+' on the town centre only':''}${miss?' · '+miss+' not found':''}. Untick anything you don’t want; doubtful matches start unticked.</p>
+  <p class="mono" style="color:var(--mute);margin-top:8px">${ok.length} found${ap?' · '+ap+' on the town centre only':''}${miss?' · '+miss+' not found':''}. Untick anything you don’t want; doubtful matches start unticked.</p>${itinLookup.note?`<div class="tip" style="margin-top:6px">${esc(itinLookup.note)}</div>`:''}
   <div style="max-height:44vh;overflow:auto;border-top:1px solid var(--line);margin-top:6px">${stops.map((s,i)=>{const h=s.hit,t=TYPES[s.type!=='other'?s.type:(h&&h.gtype)||'other'][0];
-    return `<label class="itrow${h?'':' off'}"><input type="checkbox" data-it="${i}" ${h?(h.doubt?'':'checked'):'disabled'}><div class="grow"><div class="t">${esc(h&&h.src==='Google'?h.name:s.name)}</div><div class="s">${esc([t,s.day,h?h.addr:[s.town,s.country].filter(Boolean).join(', ')].filter(Boolean).join(' · '))}</div>${!h?'<div class="w">Not found on the map. Add it by hand later with + Add place.</div>':''}${h&&s.ex?`<div class="w" style="color:var(--pine2)">Already in your places as “${esc(s.ex.name)}”. It will be added to this map.</div>`:''}${h&&h.approx?'<div class="w">Not found by name, so the pin goes on the town centre. Move it when you know the spot.</div>':''}${h&&h.doubt?`<div class="w">${esc(h.doubt)} Check it before you rely on it.</div>`:''}</div></label>`}).join('')}</div>
+    return `<label class="itrow${h?'':' off'}"><input type="checkbox" data-it="${i}" ${h?(h.doubt?'':'checked'):'disabled'}><div class="grow"><div class="t">${esc(h&&h.src==='Google'?h.name:s.name)}</div><div class="s">${esc([t,s.day,h?h.addr:[s.town,s.country].filter(Boolean).join(', ')].filter(Boolean).join(' · '))}</div>${h&&h.src==='Google'?`<div class="s" style="color:var(--pine2)">On Google Maps${h.web?' · '+esc(h.web.replace(/^https?:\/\/(www\.)?/,'').split('/')[0]):''}${h.phone?' · '+esc(h.phone):''}</div>`:''}${!h?'<div class="w">Not found on the map. Add it by hand later with + Add place.</div>':''}${h&&s.ex?`<div class="w" style="color:var(--pine2)">Already in your places as “${esc(s.ex.name)}”. It will be added to this map.</div>`:''}${h&&h.approx?'<div class="w">Not found by name, so the pin goes on the town centre. Move it when you know the spot.</div>':''}${h&&h.doubt?`<div class="w">${esc(h.doubt)} Check it before you rely on it.</div>`:''}</div></label>`}).join('')}</div>
   <div class="row" style="margin-top:14px;justify-content:flex-end"><button data-act="closemodal">Cancel</button><button class="primary" data-act="itadd" ${ok.length?'':'disabled'}>Add the ticked places</button></div>`)}
 function stashGone(ids){const u=ui.undo=ui.undo||[];for(const id of ids){const p=S.places.get(id);if(!p)continue;const at={};for(const m of S.maps.values()){syncOrder(m);const i=m.order.indexOf(id);if(i>=0)at[m.id]=i}u.push({p:JSON.parse(JSON.stringify(p)),at});deletePlace(id)}}
 function undoBar(){const n=(ui.undo||[]).length;return n?`<div class="tip row"><span class="grow">Removed ${n} planned stop${n>1?'s':''}.</span><button class="sm" data-act="undogo">Undo</button></div>`:''}
@@ -1209,6 +1211,7 @@ async function runEnrich(){if(enBusy)return;enBusy=true;let ch=false;while(enQ.l
 async function backfillAreas(){const todo=[...S.places.values()].filter(p=>p.region===undefined);let ch=false;for(const p of todo){try{const pr=await reverse(p.lat,p.lng);p.region=(pr&&pr.county)||'';p.state=(pr&&pr.state)||'';if(pr&&!p.locality)p.locality=pr.city||pr.town||pr.village||'';if(pr&&!p.country)p.country=pr.country||'';save('places',p);ch=true}catch(e){break}await sleep(700)}if(ch)softRender()}
 
 /* ---------- photo import ---------- */
+function pickMany(sel){const el=$(sel);el.multiple=true;el.setAttribute('multiple','');el.removeAttribute('capture');el.value='';el.click()}
 function isMedia(f){return /^image\/|^video\//.test(f.type)||/\.(jpe?g|png|heic|heif|webp|tiff?|mov|mp4|m4v)$/i.test(f.name)}
 function isVideo(f){return /^video\//.test(f.type)||/\.(mov|mp4|m4v)$/i.test(f.name)}
 function metrics(src){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,64,64);const d=x.getImageData(0,0,64,64).data,g=new Float32Array(4096);for(let i=0;i<4096;i++)g[i]=.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2];
@@ -1484,8 +1487,8 @@ function render(fit){
 
 /* ---------- events ---------- */
 const ACT={
-  pick(){if(IOS&&LS('tdt_picktip','1')!=='0'){modal(`<h2>Before you choose photos</h2><p>In the photo picker, tap <b>Options</b> and switch <b>Location</b> on. Without it the iPhone hands photos over with no place attached.</p><p style="color:var(--mute)">Big batches are fine. Videos take longer because the iPhone prepares each one first.</p><label class="row" style="margin:10px 0"><input type="checkbox" id="pickTip"> Don’t show this again</label><div class="row" style="justify-content:flex-end"><button data-act="closemodal">Cancel</button><button class="primary" data-act="pick2">Choose photos</button></div>`);return}$('#file').click()},
-  pick2(){if($('#pickTip')&&$('#pickTip').checked)LSset('tdt_picktip','0');closeModal();$('#file').click()},
+  pick(){if(IOS&&LS('tdt_picktip','1')!=='0'){modal(`<h2>Before you choose photos</h2><p>In the photo picker, tap <b>Options</b> and switch <b>Location</b> on. Without it the iPhone hands photos over with no place attached.</p><p style="color:var(--mute)">Big batches are fine. Videos take longer because the iPhone prepares each one first.</p><label class="row" style="margin:10px 0"><input type="checkbox" id="pickTip"> Don’t show this again</label><div class="row" style="justify-content:flex-end"><button data-act="closemodal">Cancel</button><button class="primary" data-act="pick2">Choose photos</button></div>`);return}pickMany('#file')},
+  pick2(){if($('#pickTip')&&$('#pickTip').checked)LSset('tdt_picktip','0');closeModal();pickMany('#file')},
   closemodal:closeModal,
   startimport:runImport,
   addplace(){modal(`<h2>Add a place</h2><p style="color:var(--mute);margin:4px 0 10px">Search for a hotel, restaurant, trailhead or town, or click the spot on the map. Have a whole itinerary? <a href="#" data-act="itin">Add its places from the document</a>.</p><div class="row"><input id="ps" type="text" placeholder="e.g. Rifugio Lagazuoi"><button class="primary" data-act="searchplace">Search</button></div><div id="psr" style="margin-top:10px"></div><div class="row" style="margin-top:14px;justify-content:space-between"><button data-act="clickplace">${TAP} on the map instead</button><button data-act="closemodal">Cancel</button></div>`);$('#ps').focus();$('#ps').onkeydown=e=>{if(e.key==='Enter')ACT.searchplace()}},
@@ -1522,11 +1525,11 @@ const ACT={
     if(!picked.length){toast('Nothing is ticked');return}
     const m={id:uid(),name,desc:'',order:[],route:true,created:Date.now()},fresh=[];let had=0;
     for(const s of picked){const h=s.hit;let p=s.ex&&S.places.get(s.ex.id);
-      if(p){if(!(p.maps||[]).includes(m.id)){p.maps=[...(p.maps||[]),m.id];save('places',p)}had++}
+      if(p){let ch=false;if(!(p.maps||[]).includes(m.id)){p.maps=[...(p.maps||[]),m.id];ch=true}if(h.gid&&(!p.gid||p.gid===h.gid)){if(!p.gid){p.gid=h.gid;ch=true}if(h.url&&!p.gmaps){p.gmaps=h.url;ch=true}if(gInfo(p,h.web,h.phone))ch=true}if(ch)save('places',p);had++}
       else{const nm=h.src==='Google'?h.name:s.name;
         p=newPlace(h.lat,h.lng,{name:nm,auto:false,rough:false,type:s.type!=='other'?s.type:(h.gtype||'other'),maps:[m.id],plan:true,planDay:s.day||'',locality:s.town||'',country:s.country||'',contact:s.contact||'',
           notesPrivate:[[s.day,s.note].filter(Boolean).join(' — '),plain(nm)!==plain(s.name)?'Listed in the itinerary as “'+s.name+'”.':'',h.approx?'Pin is on the town centre only. Move it when you know the spot.':''].filter(Boolean).join('\n')});
-        if(h.url)p.gmaps=h.url;if(h.gid)p.gid=h.gid;if(s.website||s.phone)p.info={website:s.website||'',phone:s.phone||'',email:'',src:'the itinerary'};
+        if(h.url)p.gmaps=h.url;if(h.gid)p.gid=h.gid;if(s.website||s.phone)p.info={website:s.website||'',phone:s.phone||'',email:'',src:'the itinerary'};if(h.gid){gInfo(p,h.web,h.phone);p.gfill=1}
         if(h.pr)applyGeo(p,h.pr,false);save('places',p);if(!h.pr)fresh.push(p.id)}
       if(!m.order.includes(p.id))m.order.push(p.id)}
     save('maps',m);ACT._it=null;closeModal();ui.tab='maps';ui.mapId=m.id;ui.placeId=null;ui.q='';$('#q').value='';render(true);
@@ -1776,7 +1779,7 @@ Object.assign(ACT,{
     const p=newPlace(n.lat,n.lng,{name:n.name,auto:false,rough:false});const t=n.pr&&guessType(n.pr);if(t)p.type=t;save('places',p);openPlace(p.id);refreshLocality(p);queueEnrich(p.id);toast('Added '+n.name+'. Photos and notes go below.',5000)},
   herenew(){const c=ACT._here;if(!c)return;closeModal();const p=newPlace(c.lat,c.lng,{});openPlace(p.id);queueGeocode(p.id)},
   hereopen(id){closeModal();openPlace(id)},
-  pickhere(){$('#fileHere').click()},
+  pickhere(){pickMany('#fileHere')},
   gshow(){ui.gshow=true;render()},
   shownear(){ui.near=ui.placeId;render()},
   sharefile(){const f=deliver.file;if(!f)return;navigator.share({files:[f]}).then(()=>{closeModal();toast('Sent')}).catch(e=>{if(e&&e.name!=='AbortError')toast('Sharing did not work here. Use Download instead.',6000)})},
@@ -1915,6 +1918,19 @@ async function gPick(id){const p=S.places.get(ui.placeId),a=$('#gask');if(!p||!a
       <div class="mono" style="color:var(--mute);margin-top:6px">“Use this place” sets the name, pin, type, website, phone and Google link. Your notes and photos are untouched.</div></div>`}
   catch(e){const box=$('#gask');if(box)box.innerHTML=`<span style="color:var(--rust);font-size:13px">Google could not give details for that place. ${esc(e&&e.message||'')}</span>`}}
 function gApply(p,lat,lng){snap(p);p.lat=lat;p.lng=lng}
+function gInfo(p,web,phone){const c=p.info||{};if(!(web&&!c.website)&&!(phone&&!c.phone))return false;p.info={website:c.website||web||'',phone:c.phone||phone||'',email:c.email||'',src:c.website||c.phone?c.src:'Google'};if(!p.info.src)delete p.info.src;return true}
+const gNeeds=()=>[...S.places.values()].filter(p=>p.gid&&!p.gfill&&!(p.info&&p.info.website&&p.info.phone));
+async function gFillAll(manual){if(gFillAll.busy)return;const todo=gNeeds().slice(0,60);if(!todo.length){if(manual)toast('Every place linked to Google already has its details.');return}
+  if(!gKey()||!/^https?:/.test(location.protocol)||!navigator.onLine){if(manual)toast('This needs the Google Maps key and an internet connection.');return}
+  gFillAll.busy=true;let n=0,bad=0;
+  try{await gmLoad();const {Place}=await google.maps.importLibrary('places');
+    for(const p of todo){if(gFail)break;
+      try{const pl=new Place({id:p.gid});await pl.fetchFields({fields:['googleMapsURI','websiteURI','internationalPhoneNumber','nationalPhoneNumber']});
+        const q=S.places.get(p.id);if(!q)continue;const got=gInfo(q,pl.websiteURI||'',pl.internationalPhoneNumber||pl.nationalPhoneNumber||'');if(pl.googleMapsURI&&!q.gmaps)q.gmaps=pl.googleMapsURI;q.gfill=1;save('places',q);if(got)n++}
+      catch(e){if(++bad>=3)break}
+      await sleep(150)}}
+  catch(e){}finally{gFillAll.busy=false}
+  if(n){render();toast('Website and phone filled in from Google for '+n+' place'+(n>1?'s':'')+'.',7000)}else if(manual)toast(bad?'Google did not answer. Try again in a minute.':'Google has no website or phone for those places.',6000)}
 Object.assign(ACT,{
   guse(){const p=S.places.get(ui.placeId),g=ACT._g;if(!p||!g)return;gApply(p,g.lat,g.lng);if(g.name)p.name=g.name;if(g.url)p.gmaps=g.url;p.gid=g.id;p.auto=false;p.rough=false;const t=gType(g.types);if(t&&(!p.type||p.type==='other'))p.type=t;const c=p.info||{};if(g.web||g.phone)p.info={website:g.web||c.website||'',phone:g.phone||c.phone||'',email:c.email||'',src:'Google'};save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Now “'+p.name+'”. Undo is just below the map.',6000)},
   gpinonly(){const p=S.places.get(ui.placeId),g=ACT._g;if(!p||!g)return;gApply(p,g.lat,g.lng);p.rough=false;save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is just below the map.',5000)},
@@ -1938,7 +1954,7 @@ Object.assign(ACT,{
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target&&e.target.id==='gq'){e.preventDefault();ACT.gsearch()}});
 
 /* ---------- start ---------- */
-(async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if((LS('tdt_gkey','')||LS('tdt_aikey',''))&&LS('tdt_cfg_sent','')!=='1'){LSset('tdt_cfg_sent','1');LSset('tdt_aikey_up','1');LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty()}if(sess())queueSync(800);setTimeout(checkDuplicates,1500);if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
+(async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if((LS('tdt_gkey','')||LS('tdt_aikey',''))&&LS('tdt_cfg_sent','')!=='1'){LSset('tdt_cfg_sent','1');LSset('tdt_aikey_up','1');LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty()}if(sess())queueSync(800);setTimeout(checkDuplicates,1500);setTimeout(()=>gFillAll(false),6000);if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
 </script>
 </body>
 </html>
