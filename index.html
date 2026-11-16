@@ -732,6 +732,11 @@ label.f small{font-weight:400}
 .strip.g3{grid-template-columns:repeat(3,1fr)}
 .ph{position:relative;aspect-ratio:1;border-radius:6px;overflow:hidden;background:#e9e4d6;cursor:pointer}
 .ph img{width:100%;height:100%;object-fit:cover;display:block}
+details.sec{border-top:1px solid var(--line);margin-top:14px;padding-top:2px}
+details.sec>summary{cursor:pointer;padding:10px 2px;font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);list-style:none}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::before{content:'▸ ';display:inline-block;width:1.1em}
+details.sec[open]>summary::before{content:'▾ '}
 .ph.sel{outline:5px solid #d6001c;outline-offset:-5px}
 .ph.sel::before{content:"";position:absolute;inset:0;background:#d6001c33;pointer-events:none}
 .ph.sel::after{content:"✓";position:absolute;left:6px;top:6px;width:24px;height:24px;border-radius:50%;background:#d6001c;color:#fff;font-weight:700;font-size:16px;line-height:24px;text-align:center;box-shadow:0 0 0 2px #fff;pointer-events:none}
@@ -1417,6 +1422,7 @@ function vPosts(){
 function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].filter(o=>o.id!==p.id).map(o=>[dist(p.lat,p.lng,o.lat,o.lng),o]).sort((a,b)=>a[0]-b[0]).slice(0,12);
   const g=esc(gUrl(p));const gpin=isRough(p)||ui.gv==='pin';const inf=p.info||{};const psel=ui.psel||(ui.psel=new Set());const web=`https://www.google.com/search?q=${encodeURIComponent([p.name,p.locality,p.country].filter(Boolean).join(' '))}`;
   const dates=phs.length?(fmtDate(phs[0].date)+(phs.length>1&&fmtDate(phs[phs.length-1].date)!==fmtDate(phs[0].date)?' – '+fmtDate(phs[phs.length-1].date):'')):'';
+  const dop=k=>ui.dopen&&k in ui.dopen?ui.dopen[k]:(k==='fix'&&isRough(p));
   return `<button class="ghost back" data-act="closeplace">← Back</button>
   <input class="title" type="text" value="${esc(p.name)}" data-f="name" data-store="places" data-id="${p.id}" aria-label="Place name">
   <div class="mono" style="color:var(--mute);padding-left:4px">${esc(placeLine(p)||'Location name not set')}${dates?' · '+dates:''}</div>
@@ -1426,21 +1432,6 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   <input type="text" value="${esc(p.bestFor||'')}" data-f="bestFor" data-store="places" data-id="${p.id}" placeholder="Best for… e.g. active couples, women’s groups, a rest day" style="margin-top:8px" aria-label="Best for">
   <div class="row wrap" style="margin-top:8px"><button class="primary" data-act="pickhere">+ Add photos to this place</button></div>
   ${TOUCH?`<div class="mono" style="color:var(--mute);margin-top:4px">Take pictures with the Camera app first, then add them here from your library, so the originals stay in your photos.</div>`:''}
-  <div class="row wrap" style="margin-top:8px"><a class="btn" target="_blank" rel="noopener" href="${g}">Google Maps ↗</a><a class="btn" target="_blank" rel="noopener" href="${web}">Find website ↗</a><button class="sm" data-act="findname" title="Searches the map for the name typed above, near this pin">Find by name</button><button class="sm" data-act="lookup">Look up name</button></div>
-  ${gKey()?gBlock(p):`<div class="row" style="margin-top:14px;gap:6px"><h3 class="grow" style="margin:0">Google view</h3>${isRough(p)?'':`<span class="chip${gpin?'':' on'}" data-act="gv" data-id="list">Listing</span><span class="chip${gpin?' on':''}" data-act="gv" data-id="pin">At the pin</span>`}<span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
-  ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google view here</button>`:`<iframe class="gframe" loading="lazy" title="Google Maps view of this place" src="${esc(gEmbed(p,gpin,ui.gsat))}"></iframe>`}
-  <div class="mono" style="color:var(--mute);margin-top:4px">${isRough(p)?'This is what Google shows at the pin. Spot the right name, type it at the top, and the listing loads here.':'Live from Google. “Open in Maps” shows the full listing with website, phone and reviews.'}</div>
-  <button class="sm" data-act="gsetup" style="margin-top:8px">Pick the place on a Google map here: set up</button>`}
-  <h3>Named places nearby <small style="text-transform:none;letter-spacing:0;font-weight:400">· click one to move this place onto it</small></h3><div id="near"><span class="mono" style="color:var(--mute)">Looking…</span></div>
-  ${(p.hist||[]).length?`<button class="sm" data-act="undoloc" style="margin-top:8px">↩ Undo location change (back to “${esc(p.hist[p.hist.length-1].name)}”, changed ${fmtDate(p.hist[p.hist.length-1].at)})</button>`:''}
-  <h3>Contact ${inf.src?`<small style="text-transform:none;letter-spacing:0;font-weight:400">· filled from ${esc(inf.src)}, check before relying on it</small>`:''}</h3>
-  <input type="text" value="${esc(p.contact||'')}" placeholder="Contact person, e.g. Giulia, sales manager" data-f="contact" data-store="places" data-id="${p.id}" style="margin-bottom:6px" aria-label="Contact person">
-  <div class="link"><input type="url" value="${esc(inf.website||'')}" placeholder="Website" data-f="info.website" data-store="places" data-id="${p.id}">${inf.website?`<a class="btn sm" target="_blank" rel="noopener" href="${esc(inf.website)}">↗</a>`:''}</div>
-  <div class="row"><input type="text" value="${esc(inf.phone||'')}" placeholder="Phone" data-f="info.phone" data-store="places" data-id="${p.id}"><input type="text" value="${esc(inf.email||'')}" placeholder="Email" data-f="info.email" data-store="places" data-id="${p.id}"></div>
-  <button class="sm" data-act="contact" style="margin-top:6px">Look for contact details</button>
-  <label class="f">Fix the location <small>— drag the highlighted pin, ${TAP.toLowerCase()} the right spot on the map, or paste from Google Maps</small></label>
-  <div class="row"><input type="text" id="gfix" placeholder="Paste a Google Maps link or coordinates"><button class="sm dark" data-act="gfix">Apply</button></div>
-  <div class="mono" style="color:var(--mute);margin-top:4px">${TOUCH?'In the Google Maps app: press and hold the exact spot, tap the coordinates that appear to copy them, then paste them here. Share links from the app do not carry the location.':'In Google Maps: open the hotel, then copy the address bar. Or right-click the spot and click the coordinates.'}</div>
   ${phs.length?`<div class="row" style="margin-top:18px"><h3 class="grow" style="margin:0">${phs.length} photo${phs.length>1?'s':''}</h3>${phs.length>1&&!ui.split?`<button class="sm" data-act="bestplace">Pick best</button>`:''}${phs.length>1?`<button class="sm${ui.split?' dark':''}" data-act="splitmode">${ui.split?'Done':'Separate photos'}</button>`:''}</div>
   ${ui.split?`<div class="private" style="border:1px solid #e6cfae;border-radius:8px;padding:8px;margin:6px 0"><div style="font-size:13px;margin-bottom:6px">Tick the photos that belong somewhere else, then choose where they go.</div><div class="row wrap"><button class="sm primary" data-act="splitnew" ${psel.size?'':'disabled'}>Move ${psel.size||''} to a new place</button>${others.length?`<select id="moveSel" style="width:auto;max-width:170px" ${psel.size?'':'disabled'} aria-label="Move to existing place"><option value="">Move to…</option>${others.map(([d,o])=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>`:''}<button class="sm" data-act="spliteach">One place per photo</button></div></div>`:''}
   <div class="strip" style="margin-top:6px">${phs.slice(0,60).map(ph=>`<div class="ph${psel.has(ph.id)?' sel':''}" data-act="${ui.split?'psel':'zoom'}" data-id="${ph.id}">${ph.thumb?`<img data-th="${ph.id}" alt="">`:`<div class="mono" style="padding:4px;word-break:break-all">${esc(ph.name)}</div>`}${ph.kind==='video'?'<span class="v">video</span>':''}${ph.star&&!ui.split?'<span class="st">★</span>':''}${ui.split?`<span class="tick">${psel.has(ph.id)?'✓':''}</span>`:''}</div>`).join('')}</div>`:''}
@@ -1448,7 +1439,27 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   <textarea data-f="notesPublic" data-store="places" data-id="${p.id}" placeholder="What a guest would love about this place">${esc(p.notesPublic)}</textarea>
   <label class="f">Private notes <small>— never leave this app</small></label>
   <textarea class="private" data-f="notesPrivate" data-store="places" data-id="${p.id}" placeholder="Contacts, rates, who to ask for, what to avoid, when you were last here">${esc(p.notesPrivate)}</textarea>
-  <h3>Links</h3>
+  <details class="sec" data-d="fix" ${dop('fix')?'open':''}><summary>Find or fix the place</summary>${dop('fix')?`
+  <div class="row wrap" style="margin-top:8px"><a class="btn" target="_blank" rel="noopener" href="${g}">Google Maps ↗</a><a class="btn" target="_blank" rel="noopener" href="${web}">Find website ↗</a><button class="sm" data-act="findname" title="Searches the map for the name typed above, near this pin">Find by name</button><button class="sm" data-act="lookup">Look up name</button></div>
+  ${gKey()?gBlock(p):`<div class="row" style="margin-top:14px;gap:6px"><h3 class="grow" style="margin:0">Google view</h3>${isRough(p)?'':`<span class="chip${gpin?'':' on'}" data-act="gv" data-id="list">Listing</span><span class="chip${gpin?' on':''}" data-act="gv" data-id="pin">At the pin</span>`}<span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
+  ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google view here</button>`:`<iframe class="gframe" loading="lazy" title="Google Maps view of this place" src="${esc(gEmbed(p,gpin,ui.gsat))}"></iframe>`}
+  <div class="mono" style="color:var(--mute);margin-top:4px">${isRough(p)?'This is what Google shows at the pin. Spot the right name, type it at the top, and the listing loads here.':'Live from Google. “Open in Maps” shows the full listing with website, phone and reviews.'}</div>
+  <button class="sm" data-act="gsetup" style="margin-top:8px">Pick the place on a Google map here: set up</button>`}
+  ${ui.near===p.id?`<h3>Named places nearby <small style="text-transform:none;letter-spacing:0;font-weight:400">· click one to move this place onto it</small></h3><div id="near"><span class="mono" style="color:var(--mute)">Looking…</span></div>`:`<button class="sm" data-act="shownear" style="margin-top:8px">Show named places nearby</button>`}
+  ${(p.hist||[]).length?`<button class="sm" data-act="undoloc" style="margin-top:8px">↩ Undo location change (back to “${esc(p.hist[p.hist.length-1].name)}”, changed ${fmtDate(p.hist[p.hist.length-1].at)})</button>`:''}
+  <label class="f">Fix the location <small>— drag the highlighted pin, ${TAP.toLowerCase()} the right spot on the map, or paste from Google Maps</small></label>
+  <div class="row"><input type="text" id="gfix" placeholder="Paste a Google Maps link or coordinates"><button class="sm dark" data-act="gfix">Apply</button></div>
+  <div class="mono" style="color:var(--mute);margin-top:4px">${TOUCH?'In the Google Maps app: press and hold the exact spot, tap the coordinates that appear to copy them, then paste them here. Share links from the app do not carry the location.':'In Google Maps: open the hotel, then copy the address bar. Or right-click the spot and click the coordinates.'}</div>
+  `:''}</details>
+  <details class="sec" data-d="contact" ${dop('contact')?'open':''}><summary>Contact${p.contact?' · '+esc(p.contact):''}</summary>${dop('contact')?`
+  ${inf.src?`<div class="mono" style="color:var(--mute)">Filled from ${esc(inf.src)}, check before relying on it.</div>`:''}
+  <input type="text" value="${esc(p.contact||'')}" placeholder="Contact person, e.g. Giulia, sales manager" data-f="contact" data-store="places" data-id="${p.id}" style="margin-bottom:6px" aria-label="Contact person">
+  <div class="link"><input type="url" value="${esc(inf.website||'')}" placeholder="Website" data-f="info.website" data-store="places" data-id="${p.id}">${inf.website?`<a class="btn sm" target="_blank" rel="noopener" href="${esc(inf.website)}">↗</a>`:''}</div>
+  <div class="row"><input type="text" value="${esc(inf.phone||'')}" placeholder="Phone" data-f="info.phone" data-store="places" data-id="${p.id}"><input type="text" value="${esc(inf.email||'')}" placeholder="Email" data-f="info.email" data-store="places" data-id="${p.id}"></div>
+  <button class="sm" data-act="contact" style="margin-top:6px">Look for contact details</button>
+  `:''}</details>
+  <details class="sec" data-d="more" ${dop('more')?'open':''}><summary>Links, tags, maps, draft a post, delete</summary>${dop('more')?`
+  <h3 style="margin-top:4px">Links</h3>
   ${(p.links||[]).map((l,i)=>`<div class="link"><input type="text" value="${esc(l.label)}" placeholder="Label" data-link="${i}" data-k="label" style="width:30%;min-width:84px"><input type="url" value="${esc(l.url)}" placeholder="https://" data-link="${i}" data-k="url"><label class="row" style="font-size:12px;gap:2px" title="Private links are left out of share pages"><input type="checkbox" data-link="${i}" data-k="priv" ${l.priv?'checked':''}>private</label>${l.url?`<a class="btn sm" target="_blank" rel="noopener" href="${esc(l.url)}">↗</a>`:''}<button class="ghost sm" data-act="dellink" data-id="${i}" aria-label="Remove link">✕</button></div>`).join('')}
   <button class="sm" data-act="addlink">+ Add link</button>
   <label class="f">Tags <small>— comma separated</small></label>
@@ -1458,7 +1469,8 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   <h3>Tidy up</h3>
   <div class="row wrap"><button class="sm" data-act="postplace">Draft a post</button>
   ${others.length?`<select id="mergeSel" style="width:auto;max-width:190px" aria-label="Merge into"><option value="">Merge into…</option>${others.map(([d,o])=>`<option value="${o.id}">${esc(o.name)} (${d<1000?Math.round(d)+' m':(d/1000).toFixed(1)+' km'})</option>`).join('')}</select>`:''}
-  <button class="sm danger ghost" data-act="delplace" style="margin-left:auto">Delete place</button></div>`}
+  <button class="sm danger ghost" data-act="delplace" style="margin-left:auto">Delete place</button></div>
+  `:''}</details>`}
 
 function render(fit){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===ui.tab&&!ui.placeId));
@@ -1618,6 +1630,7 @@ const ACT={
 };
 function moveStop(id,d){const m=S.maps.get(ui.mapId);if(!m)return;const i=m.order.indexOf(id),j=i+d;if(i<0||j<0||j>=m.order.length)return;[m.order[i],m.order[j]]=[m.order[j],m.order[i]];save('maps',m);render()}
 
+document.addEventListener('toggle',e=>{const d=e.target;if(!d||!d.matches||!d.matches('details.sec[data-d]'))return;const k=d.dataset.d,p=S.places.get(ui.placeId);ui.dopen=ui.dopen||{};const cur=k in ui.dopen?ui.dopen[k]:(k==='fix'&&p&&isRough(p));if(cur===d.open)return;ui.dopen[k]=d.open;render()},true);
 document.addEventListener('click',e=>{
   const tab=e.target.closest('[data-tab]');if(tab){ui.tab=tab.dataset.tab;ui.placeId=null;ui.postId=null;if(ui.tab!=='maps'&&ui.tab!=='posts')ui.mapId=null;render(ui.tab==='places');return}
   const base=e.target.closest('[data-base]');if(base){map.removeLayer(BASES[curBase]);curBase=base.dataset.base;BASES[curBase].addTo(map);document.querySelectorAll('#base button').forEach(b=>b.classList.toggle('on',b===base));return}
@@ -1765,6 +1778,7 @@ Object.assign(ACT,{
   hereopen(id){closeModal();openPlace(id)},
   pickhere(){$('#fileHere').click()},
   gshow(){ui.gshow=true;render()},
+  shownear(){ui.near=ui.placeId;render()},
   sharefile(){const f=deliver.file;if(!f)return;navigator.share({files:[f]}).then(()=>{closeModal();toast('Sent')}).catch(e=>{if(e&&e.name!=='AbortError')toast('Sharing did not work here. Use Download instead.',6000)})},
   dlfile(){if(deliver.file){download(deliver.file.name,deliver.blob);closeModal()}},
   timeplace(){const base=photoList().filter(p=>!p.placeId);const done=placeByTime(base);ACT._timed=done.map(x=>x.id);render();if(!done.length){toast(`None of these was taken within ${TIMEWIN} minutes of a photo that has a location. Pin them by hand.`,8000);return}timeReport(done)},
