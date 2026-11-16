@@ -755,6 +755,7 @@ a{color:var(--pine2)}
 #modal{position:fixed;inset:0;background:#0007;z-index:2000;display:none;align-items:center;justify-content:center;padding:20px}
 #modal>div{background:var(--paper);border-radius:14px;padding:20px;width:min(520px,100%);max-height:90vh;overflow:auto}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;z-index:4000;display:none;max-width:80vw}
+#pundo{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 10px 8px 14px;border-radius:10px;z-index:4100;display:none;gap:10px;align-items:center;width:max-content;max-width:92vw;box-shadow:0 4px 18px #0004}
 #light{position:fixed;inset:0;background:#000d;z-index:2500;display:none;align-items:center;justify-content:center;flex-direction:column;color:#fff;gap:10px}
 #light img{max-width:86vw;max-height:76vh;border-radius:6px}
 #rvBar{position:absolute;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;padding:12px 16px;background:#000a}
@@ -815,6 +816,7 @@ input[type=password]{font:inherit;width:100%;padding:8px 10px;border:1px solid v
   #modal{align-items:flex-end;padding:0;bottom:auto;height:var(--vh,100dvh)}
   #modal>div{width:100%;border-radius:18px 18px 0 0;max-height:88dvh;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
   #toast{bottom:calc(74px + env(safe-area-inset-bottom));width:max-content;max-width:92vw}
+  #pundo{bottom:calc(124px + env(safe-area-inset-bottom))}
   #rvBar{flex-wrap:wrap;padding:calc(8px + env(safe-area-inset-top)) 10px 8px}
   #lightCap{flex-basis:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #light img{max-width:100vw;max-height:66dvh;border-radius:0}
@@ -889,6 +891,7 @@ aside,header{min-width:0}
 <div id="modal"><div id="modalBody"></div></div>
 <div id="light"><div id="rvBar"><span id="lightCap" class="mono"></span><span class="grow"></span><button data-act="rvstar" id="rvStar">☆ Best</button><button data-act="rvedit" id="rvEdit">✎ To edit</button><button data-act="rvdel">Remove</button><button data-act="rvclose">Close</button></div><button class="rvnav" style="left:14px" data-act="rvprev" aria-label="Previous">‹</button><img alt=""><input id="rvCap" type="text" placeholder="Caption for this photo (goes with it into post drafts)" aria-label="Caption" autocomplete="off"><button class="rvnav" style="right:14px" data-act="rvnext" aria-label="Next">›</button><div class="mono" id="rvHelp">← → move · S best · E to edit · X remove · Esc close. Removing only takes the photo out of this app, never out of Apple Photos.</div></div>
 <div id="toast"></div>
+<div id="pundo"><span id="pundoT"></span><button class="sm" data-act="undophoto">Undo</button><button class="sm" data-act="pundoclose" aria-label="Dismiss">✕</button></div>
 
 <script>/* @preserve
  * Leaflet 1.9.4, a JS library for interactive maps. https://leafletjs.com
@@ -1240,6 +1243,10 @@ async function runAI(){const key=$('#aiKey').value.trim(),crit=$('#aiCrit').valu
   render();modal(`<h2>${done} photos rated${runAI.stop?' (stopped)':''}</h2>${err?`<p style="color:var(--rust)">Stopped early: ${esc(err)}</p><p class="mono" style="color:var(--mute)">Photos already rated are kept. Run it again later and it carries on from where it stopped.</p>`:''}<p>${best} scored 7 or higher and are marked ★ Best (one per run of look-alikes). Each photo now shows its score, and its caption appears when you click it.</p><p style="color:var(--mute)">Nothing has been removed.</p><div class="row wrap" style="justify-content:flex-end"><button data-act="closemodal">Done</button><button class="primary" data-act="showrest">Look through the others</button></div>`)}
 const bestFirst=a=>[...a].sort((x,y)=>(y.star?1:0)-(x.star?1:0));
 function removePhoto(id){remove('photos',id);DB.del('thumbs',id);TH.mem.delete(id);ui.sel.delete(id)}
+function pundoShow(){const b=ui.pundo||[];const e=$('#pundo');if(!e)return;if(!b.length){e.style.display='none';return}$('#pundoT').textContent='Removed '+b.length+' photo'+(b.length>1?'s':'')+' from the app.';e.style.display='flex'}
+async function dropPhotos(ids,add){const batch=(add&&ui.pundo)?ui.pundo:(ui.pundo=[]);const seen=new Set(batch.map(b=>b.oid)),got=[];for(const id of ids){const ph=S.photos.get(id);if(ph&&!seen.has(id)){seen.add(id);got.push({oid:id,ph:JSON.parse(JSON.stringify(ph)),blob:null})}}
+  for(const g of got)g.blob=await getThumbBlob(g.oid).catch(()=>null)||null;
+  for(const g of got){removePhoto(g.oid);batch.push(g)}pundoShow();return got.length}
 async function canvasThumb(src,w,h){const s=Math.min(1,640/Math.max(w,h));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*s));c.height=Math.max(1,Math.round(h*s));c.getContext('2d').drawImage(src,0,0,c.width,c.height);let m=null;try{m=metrics(c)}catch(e){}return new Promise(r=>c.toBlob(b=>{if(b)b._m=m;r(b)},'image/jpeg',.82))}
 async function imageThumb(file){let bmp=null;try{bmp=await createImageBitmap(file)}catch(e){try{const u=await exifr.thumbnail(file);if(u)bmp=await createImageBitmap(new Blob([u]))}catch(e2){}}
   if(!bmp)return null;const b=await canvasThumb(bmp,bmp.width,bmp.height);bmp.close&&bmp.close();return b}
@@ -1545,18 +1552,18 @@ const ACT={
   _best(r,inPlace){$('#toast').style.display='none';render();modal(`<h2>${r.best} of ${r.total} marked ★ Best</h2><p>From each run of near-identical shots I kept the sharpest (${r.dups} look-alikes set aside)${r.blur?`, and left out ${r.blur} that look blurry`:''}. This judges sharpness and repeats only, not which view is prettier, so treat it as a first pass.</p><p style="color:var(--mute)">Nothing has been removed. ★ photos are used first for covers, share pages and posts.</p><div class="row wrap" style="justify-content:flex-end"><button data-act="closemodal">Done</button>${inPlace?'':`<button class="primary" data-act="showrest">Look through the others</button>`}</div>`)},
   showrest(){closeModal();ui.tab='photos';ui.placeId=null;ui.photoFilter='rest';render()},
   delrest(){const n=photoList().filter(p=>!p.star).length;modal(`<h2>Remove ${n} photos from the app?</h2><p>They stay in Apple Photos; only the app's copies go. Places left with no photos keep their notes.</p><div class="row" style="justify-content:flex-end"><button data-act="closemodal">Keep them</button><button class="primary" data-act="delrest2">Remove ${n}</button></div>`)},
-  delrest2(){for(const ph of photoList().filter(p=>!p.star))removePhoto(ph.id);closeModal();ui.photoFilter='all';render();toast('Removed')},
+  async delrest2(){const ids=photoList().filter(p=>!p.star).map(p=>p.id);closeModal();ui.pundoRv=false;await dropPhotos(ids);ui.photoFilter='all';render();toast('Removed '+ids.length+'. Undo is at the bottom.',6000)},
   clearsel(){ui.sel.clear();render()},
   placesel(){setMode({kind:'photos'},`${TAP} the map where these ${ui.sel.size} were taken`);if(PHONE()&&ui.size==='list')setSize('split')},
-  delsel(){for(const id of [...ui.sel])removePhoto(id);ui.sel.clear();render()},
+  async delsel(){const ids=[...ui.sel];ui.sel.clear();ui.pundoRv=false;await dropPhotos(ids);render()},
   zoom(id,el){const box=el&&el.parentElement;const ids=box?[...box.querySelectorAll(':scope > [data-id]')].map(x=>x.dataset.id):[id];ui.rv={ids,i:Math.max(0,ids.indexOf(id)),dirty:false};$('#light').style.display='flex';ACT._rv()},
   _rv(){const r=ui.rv;if(!r||!r.ids.length){ACT.rvclose();return}r.i=Math.min(Math.max(r.i,0),r.ids.length-1);const ph=S.photos.get(r.ids[r.i]);if(!ph){r.ids.splice(r.i,1);ACT._rv();return}const pl=ph.placeId&&S.places.get(ph.placeId);
     thumbUrl(ph.id).then(u=>{$('#light img').src=u||''});$('#lightCap').textContent=`${r.i+1} / ${r.ids.length} · ${ph.name} · ${fmtDate(ph.date)}${pl?' · '+pl.name:''}${ph.kind==='video'?' · video (first frame)':''}${ph.ai?' · AI '+ph.ai+'/10':''}`;$('#rvStar').textContent=ph.star?'★ Best':'☆ Best';$('#rvStar').className=ph.star?'primary':'';$('#rvEdit').className=ph.edit?'primary':'';if(document.activeElement!==$('#rvCap')||$('#rvCap').dataset.id!==ph.id){$('#rvCap').value=ph.cap||'';$('#rvCap').dataset.id=ph.id}},
   rvprev(){if(ui.rv){ui.rv.i--;ACT._rv()}},
   rvnext(){if(ui.rv){ui.rv.i++;ACT._rv()}},
   rvstar(){const r=ui.rv;if(!r)return;const ph=S.photos.get(r.ids[r.i]);ph.star=!ph.star;save('photos',ph);r.dirty=true;ACT._rv()},
-  rvdel(){const r=ui.rv;if(!r)return;removePhoto(r.ids[r.i]);r.ids.splice(r.i,1);r.dirty=true;ACT._rv()},
-  rvclose(){const d=ui.rv&&ui.rv.dirty;ui.rv=null;$('#light').style.display='none';if(d)render()},
+  async rvdel(){const r=ui.rv;if(!r||!r.ids.length)return;const id=r.ids[r.i],add=!!ui.pundoRv;ui.pundoRv=true;r.ids.splice(r.i,1);r.dirty=true;ACT._rv();await dropPhotos([id],add)},
+  rvclose(){const d=ui.rv&&ui.rv.dirty;ui.rv=null;ui.pundoRv=false;$('#light').style.display='none';if(d)render()},
   up(id){moveStop(id,-1)},down(id){moveStop(id,1)},
   route(_,el){const m=S.maps.get(ui.mapId);m.route=el.checked;save('maps',m);drawPins()},
   delmap(){const m=S.maps.get(ui.mapId);if(!m)return;modal(`<h2>Delete “${esc(m.name)}”?</h2><p>The places and photos stay in your library; only this map goes.</p><div class="row" style="justify-content:flex-end"><button data-act="closemodal">Keep</button><button class="primary" data-act="delmap2">Delete map</button></div>`)},
@@ -1661,7 +1668,9 @@ function findDuplicates(){const groups=new Map();for(const p of S.photos.values(
 let dupNoticeShown=false;
 function checkDuplicates(){const d=findDuplicates();if(!d.length||dupNoticeShown||$('#modal').style.display==='flex')return;dupNoticeShown=true;
   modal(`<h2>${d.length} photo${d.length>1?'s are':' is'} in the app twice</h2><p>The same picture was added more than once, probably by dragging an album in again. Remove the extra copies? For each picture the copy with your star, place and preview is kept.</p><p style="color:var(--mute);font-size:14px">This only removes copies from this app. Nothing changes in your photo library.</p><div class="row wrap" style="justify-content:flex-end;margin-top:12px"><button data-act="closemodal">Not now</button><button class="primary" data-act="dedupe">Remove ${d.length} extra cop${d.length>1?'ies':'y'}</button></div>`)}
-ACT.dedupe=function(){const d=findDuplicates();for(const p of d)removePhoto(p.id);closeModal();render();toast(`Removed ${d.length} extra cop${d.length===1?'y':'ies'}. Your photo library is unchanged.`,6000)};
+ACT.dedupe=async function(){const d=findDuplicates();closeModal();ui.pundoRv=false;await dropPhotos(d.map(p=>p.id));render();toast(`Removed ${d.length} extra cop${d.length===1?'y':'ies'}. Your photo library is unchanged.`,6000)};
+ACT.undophoto=async function(){const b=ui.pundo||[];ui.pundo=null;ui.pundoRv=false;pundoShow();let n=0;for(const {ph,blob} of b){ph.id=uid();if(blob)await putThumb(ph.id,blob);save('photos',ph);n++}render(true);if(ui.rv)ui.rv.dirty=true;toast('Put back '+n+' photo'+(n>1?'s':''))};
+ACT.pundoclose=function(){ui.pundo=null;ui.pundoRv=false;pundoShow()};
 
 /* ---------- phone: layout, location, sending files, merging ---------- */
 function setSize(s){document.body.classList.remove('sz-map','sz-list');if(s!=='split')document.body.classList.add('sz-'+s);ui.size=s;document.querySelectorAll('#sizer button').forEach(b=>b.classList.toggle('on',b.dataset.size===s));setTimeout(()=>map.invalidateSize(),80)}
@@ -1761,7 +1770,7 @@ Object.assign(ACT,{
   showtime(){closeModal();ui.tab='photos';ui.placeId=null;ui.mapId=null;ui.photoFilter='bytime';render()},
   okbytime(){let n=0;for(const p of photoList().filter(x=>x.byTime)){p.byTime=false;delete p.byGap;save('photos',p);n++}render();toast(`${n} confirmed.`)},
   shownogps(){closeModal();ui.tab='photos';ui.placeId=null;ui.mapId=null;ui.photoFilter='unplaced';render()},
-  delnogps(){for(const id of runImport.nog||[]){const ph=S.photos.get(id);if(ph&&!ph.placeId)removePhoto(id)}runImport.nog=[];closeModal();render();toast('Removed. Add them again with Location switched on in the picker.',7000)},
+  async delnogps(){const ids=(runImport.nog||[]).filter(id=>{const ph=S.photos.get(id);return ph&&!ph.placeId});runImport.nog=[];closeModal();ui.pundoRv=false;await dropPhotos(ids);render();toast('Removed. Add them again with Location switched on in the picker.',7000)},
   backup(){const last=LS('tdt_lastbackup','');modal(`<h2>Backup and transfer</h2><p style="color:var(--mute);margin:4px 0 0">A backup file is a spare copy of everything in the app that you keep yourself. ${sess()?'Sync is on, so your devices already keep each other up to date.':'To keep phone and Mac in step automatically, use <a href="#" data-act="sync">Sync</a> instead.'}</p>
     <h3>From this device</h3><button class="primary" data-act="dobackup">${TOUCH?'Send a backup file…':'Save a backup file'}</button><div class="mono" style="color:var(--mute);margin-top:6px">${last?'Last backup from here: '+esc(last):'No backup made from this device yet.'}</div>
     <h3>Into this device</h3><button data-act="dorestore">Merge in a backup file…</button><div class="mono" style="color:var(--mute);margin-top:6px">Merging keeps the newer version of each place, photo, map and draft. Nothing here is wiped.</div>
