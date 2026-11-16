@@ -925,6 +925,7 @@ function placeHay(p){const yrs=[...new Set(photosOf(p.id).map(x=>new Date(x.date
   return [p.name,p.locality,p.region,p.state,p.country,p.notesPublic,p.notesPrivate,p.bestFor,p.contact,(p.tags||[]).join(' '),(TYPES[p.type]||[''])[0],VERD[p.verdict]?VERD[p.verdict][0]:'',isPlan(p)?'planned '+(p.planDay||''):'',p.stars?p.stars+'★ '+p.stars+'star':'',(p.maps||[]).map(id=>(S.maps.get(id)||{}).name||'').join(' '),yrs,p.info?[p.info.website,p.info.email].join(' '):''].join(' ').toLowerCase()}
 function placeFilter(p){if(p.id===ui.placeId)return true;if(ui.typeFilter&&p.type!==ui.typeFilter)return false;if(ui.vf&&(ui.vf==='plan'?!isPlan(p):ui.vf==='none'?(!!p.verdict||isPlan(p)):p.verdict!==ui.vf))return false;if(ui.minStars&&(p.stars||0)<ui.minStars)return false;return true}
 function rateBits(p){return (isPlan(p)?`<span class="vd" style="--c:#8a8474">Planned</span> ${p.planDay?esc(p.planDay.split('·')[0].trim())+' · ':''}`:'')+(VERD[p.verdict]?`<span class="vd" style="--c:${VERD[p.verdict][1]}">${VERD[p.verdict][0]}</span> `:'')+(p.stars?`<span style="color:#c98a00">${'★'.repeat(p.stars)}</span> · `:'')}
+function setAiKey(k){if(!k||k===LS('tdt_aikey','')&&LS('tdt_aikey_up','')==='1')return;LSset('tdt_aikey',k);LSset('tdt_aikey_up','1');LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty();if(sess())queueSync(800)}
 function isPlan(p){return p.plan===true&&!p.stars&&!p.verdict&&!photosOf(p.id).length}
 const isDoc=f=>/\.(pdf|docx|eml|txt|html?|rtf|doc|msg|pages)$/i.test(f.name)||f.type==='application/pdf';
 const med=a=>{a=[...a].sort((x,y)=>x-y);return a[a.length>>1]};
@@ -1002,7 +1003,7 @@ function askItin(file){askItin.file=file||null;
   modal(`<h2>Add places from an itinerary</h2><p style="color:var(--mute);margin:4px 0 0">Give it a fam or trip itinerary and each hotel, restaurant, sight and walk becomes a planned pin on a new map, ready for your photos and notes.</p>
   <div class="row" style="margin-top:12px"><button data-act="itfile">Choose a file…</button><span id="itName" class="mono grow" style="color:var(--mute)">${file?esc(file.name):'PDF, Word (.docx) or saved email (.eml)'}</span></div>
   <label class="f">Or paste the itinerary or the email text</label><textarea id="itText" style="min-height:84px" placeholder="Paste here. A plain list works too, one place per line: Hotel Lago Verde, Molveno"></textarea>
-  <label class="f">Your Gemini API key <small>— reads the document. Stays in this browser. Get one free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. No key? Paste one place per line instead.</small></label><input id="itKey" type="password" value="${esc(LS('tdt_aikey',''))}" placeholder="AIza…" autocomplete="off">
+  <label class="f">Your Gemini API key <small>— reads the document. Saved in the app; Sync carries it to your other devices. Get one free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. No key? Paste one place per line instead.</small></label><input id="itKey" type="password" value="${esc(LS('tdt_aikey',''))}" placeholder="AIza…" autocomplete="off">
   <p class="mono" style="color:var(--mute);margin-top:8px">The document goes to Google Gemini to find the places, then each one is looked up on the map. You check the list before anything is added.</p>
   <div id="itMsg" style="color:var(--rust);font-size:13px;min-height:18px;margin-top:6px" aria-live="polite"></div>
   <div class="row" style="margin-top:10px;justify-content:flex-end"><button data-act="closemodal">Cancel</button><button class="primary" data-act="itread">Find the places</button></div>`)}
@@ -1012,7 +1013,7 @@ async function runItin(){const key=$('#itKey').value.trim(),txt=$('#itText').val
   try{let trip='',stops;
     if(!key){if(f){msg('Reading a document needs the Gemini key. Without one, paste a list of places, one per line.');return}
       stops=txt.split(/\n+/).map(s=>s.replace(/^[\s\-•*\d.)]+/,'').trim()).filter(Boolean).slice(0,80).map(l=>({name:l.split(',')[0].trim(),q:l,type:'other',town:'',country:'',day:'',note:'',contact:'',phone:'',website:''}))}
-    else{LSset('tdt_aikey',key);msg('Reading the document… this can take up to a minute.');const doc=f?await readDoc(f):{text:'',pdf:[]};if(txt)doc.text=(doc.text?doc.text+'\n\n':'')+txt;
+    else{setAiKey(key);msg('Reading the document… this can take up to a minute.');const doc=f?await readDoc(f):{text:'',pdf:[]};if(txt)doc.text=(doc.text?doc.text+'\n\n':'')+txt;
       if(!doc.text.trim()&&!doc.pdf.length)throw new Error('No text could be read from that file.');
       const r=await itinAI(key,doc);trip=r.trip;stops=r.stops}
     if(!stops.length){msg('No named places were found in that.');return}
@@ -1214,13 +1215,13 @@ const LS=(k,d)=>{try{return localStorage.getItem(k)??d}catch(e){return d}},LSset
 const AIDEF='Photos that would make someone want to take this walking trip: trails and views, villages, food and tables, hotel rooms and terraces, good light. Mark down blurry shots, near-duplicates, screenshots, receipts, and photos where strangers’ faces are the main subject.';
 function askAI(list){list=list.filter(p=>p.thumb);askAI.list=list;const todo=list.filter(p=>p.ai===undefined).length;
   modal(`<h2>Rate ${list.length} photos with AI</h2><p style="color:var(--mute);margin:4px 0 0">Sends the small previews (not your originals) to Google Gemini, which scores each 1–10 against your brief and writes a short caption. ${todo<list.length?(list.length-todo)+' already rated are skipped. ':''}Rough cost for ${todo}: under $${Math.max(0.01,todo*0.0002).toFixed(2)}, and usually free within Gemini’s free daily allowance.</p>
-  <label class="f">Your Gemini API key <small>— stays in this browser. Get one free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></small></label><input id="aiKey" type="password" value="${esc(LS('tdt_aikey',''))}" placeholder="AIza…" autocomplete="off">
+  <label class="f">Your Gemini API key <small>— saved in the app; Sync carries it to your other devices. Get one free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></small></label><input id="aiKey" type="password" value="${esc(LS('tdt_aikey',''))}" placeholder="AIza…" autocomplete="off">
   <label class="f">What counts as a best photo</label><textarea id="aiCrit" style="min-height:110px">${esc(LS('tdt_aicrit',AIDEF))}</textarea>
   <label class="f">Model <small>— the cheapest that can see images</small></label><input id="aiModel" type="text" value="${esc(LS('tdt_aimodel','gemini-2.5-flash-lite'))}">
   <div class="row" style="margin-top:16px;justify-content:flex-end"><button data-act="closemodal">Cancel</button><button class="primary" data-act="runai">Rate ${todo} photos</button></div>`)}
 async function b64(blob){const u=await blobToDataURL(blob);return u.slice(u.indexOf(',')+1)}
 async function runAI(){const key=$('#aiKey').value.trim(),crit=$('#aiCrit').value.trim()||AIDEF,model=$('#aiModel').value.trim()||'gemini-2.5-flash-lite';if(!key){toast('Paste your Gemini API key first');return}
-  LSset('tdt_aikey',key);LSset('tdt_aicrit',crit);LSset('tdt_aimodel',model);const list=askAI.list||[],todo=list.filter(p=>p.ai===undefined);
+  setAiKey(key);LSset('tdt_aicrit',crit);LSset('tdt_aimodel',model);const list=askAI.list||[],todo=list.filter(p=>p.ai===undefined);
   modal(`<h2>Rating photos…</h2><progress id="aiProg" max="${todo.length||1}" value="0"></progress><div id="aiMsg" class="mono" style="margin-top:8px">Starting…</div><div class="row" style="justify-content:flex-end;margin-top:10px"><button data-act="stopai">Stop</button></div>`);
   runAI.stop=false;let done=0,err='';
   for(let i=0;i<todo.length&&!runAI.stop;i+=6){const batch=todo.slice(i,i+6);const parts=[{text:`You are helping a walking-tour operator choose photos. Brief: ${crit}\n\nRate each of the ${batch.length} photos from 1 (unusable) to 10 (outstanding) against the brief. Reply with only a JSON array, one object per photo in order: {"n": photo number, "score": integer 1-10, "caption": plain factual description of what is visible, at most 12 words, no place names you cannot see}.`}];
@@ -1798,7 +1799,7 @@ const thWant=()=>new Set(LS('tdt_thwant','').split(',').filter(Boolean));
 
 async function syncNow(manual){if(!sess()){if(manual)ACT.sync();return}if(SYNC.busy){SYNC.again=true;return}SYNC.busy=true;setSyncMsg('Syncing…');
   try{const s=await sbToken();
-    if(LS('tdt_synced_as','')!==s.uid){for(const st of STORES4)for(const o of S[st].values())dirty[o.id]=st;for(const id of Object.keys(getTomb()))if(!dirty[id])dirty[id]='x';if(LS('tdt_gkey','')){if(!+LS('tdt_cfg_upd','0'))LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg'}LSset('tdt_cursor','0');LSset('tdt_thup','');LSset('tdt_thwant','');LSset('tdt_synced_as',s.uid);persistDirty()}
+    if(LS('tdt_synced_as','')!==s.uid){for(const st of STORES4)for(const o of S[st].values())dirty[o.id]=st;for(const id of Object.keys(getTomb()))if(!dirty[id])dirty[id]='x';if(LS('tdt_gkey','')||LS('tdt_aikey','')){if(!+LS('tdt_cfg_upd','0'))LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg'}LSset('tdt_cursor','0');LSset('tdt_thup','');LSset('tdt_thwant','');LSset('tdt_synced_as',s.uid);persistDirty()}
     const got=await syncPull(s),sent=await syncPush(s),th=await syncThumbs(s);
     LSset('tdt_lastsync',String(Date.now()));setSyncMsg('');if(got||th)softRender();if(got)setTimeout(checkDuplicates,800);if(manual)toast(`Synced: ${sent} sent, ${got} received`,5000)}
   catch(e){setSyncMsg(navigator.onLine===false?'Offline. Changes are kept here and sent when you are back online.':'Sync did not finish: '+(e.message||e));if(manual)toast(SYNC.msg,8000)}
@@ -1808,7 +1809,11 @@ async function syncPull(s){let cur=+LS('tdt_cursor','0')||0,n=0,tch=false;const 
   for(;;){const r=await sb(`/rest/v1/tdt_records?select=id,store,upd,deleted,data,rev&rev=gt.${cur}&order=rev.asc&limit=500`);if(!r.ok)throw new Error(r.status===401||r.status===403?'this login is not allowed to use the sync store':'could not read from the sync store ('+r.status+')');const rows=await r.json();
     for(const row of rows){cur=Math.max(cur,+row.rev);const id=row.id,u=+row.upd;
       if(row.deleted){if(!(tomb[id]>=u)){tomb[id]=u;tch=true}for(const st of STORES4){const o=S[st].get(id);if(o&&(o.upd||0)<u){S[st].delete(id);await DB.del(st,id);if(st==='photos'){await DB.del('thumbs',id);TH.mem.delete(id);TH.url.delete(id);want.delete(id)}delete dirty[id];n++}}continue}
-      if(row.store==='cfg'&&row.data){if(u>(+LS('tdt_cfg_upd','0')||0)){const had=gKey();LSset('tdt_cfg_upd',String(u));LSset('tdt_gkey',row.data.gkey||'');delete dirty.cfg;if(gKey()!==had){n++;if(gmP)setTimeout(()=>toast('Your Google key changed on another device. Reload this page to use it.',9000),500)}}continue}
+      if(row.store==='cfg'&&row.data){if(u>(+LS('tdt_cfg_upd','0')||0)){const had=gKey(),d=row.data;let re=false;LSset('tdt_cfg_upd',String(u));delete dirty.cfg;
+        if(d.gkey){LSset('tdt_gkey',d.gkey);LSset('tdt_gkoff','')}else if(d.gkeyOff)LSset('tdt_gkey','');else if(LS('tdt_gkey',''))re=true;
+        if(d.aikey){LSset('tdt_aikey',d.aikey);LSset('tdt_aikey_up','1')}else if(LS('tdt_aikey',''))re=true;
+        if(re){LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg'}
+        if(gKey()!==had){n++;if(gmP)setTimeout(()=>toast('Your Google key changed on another device. Reload this page to use it.',9000),500)}}continue}
       if(!STORES4.includes(row.store)||!row.data)continue;if(tomb[id]&&tomb[id]>=u)continue;const have=S[row.store].get(id);if(have&&(have.upd||0)>=u)continue;
       const o=row.data;o.upd=u;S[row.store].set(id,o);await DB.put(row.store,o);delete dirty[id];n++;if(row.store==='photos'&&o.thumb&&!(await getThumbBlob(id)))want.add(id)}
     LSset('tdt_cursor',String(cur));if(rows.length<500)break}
@@ -1817,7 +1822,7 @@ async function syncPull(s){let cur=+LS('tdt_cursor','0')||0,n=0,tch=false;const 
 async function syncPush(s){const ids=Object.keys(dirty);if(!ids.length)return 0;const tomb=getTomb(),up=new Set(LS('tdt_thup','').split(',').filter(Boolean));let sent=0;
   for(let i=0;i<ids.length;i+=100){const rows=[];
     for(const id of ids.slice(i,i+100)){const st=dirty[id],o=S[st]&&S[st].get(id);
-      if(st==='cfg'){rows.push({id:'cfg',store:'cfg',upd:+LS('tdt_cfg_upd','0')||Date.now(),deleted:false,data:{gkey:LS('tdt_gkey','')}});continue}
+      if(st==='cfg'){rows.push({id:'cfg',store:'cfg',upd:+LS('tdt_cfg_upd','0')||Date.now(),deleted:false,data:{gkey:LS('tdt_gkey',''),aikey:LS('tdt_aikey',''),gkeyOff:!LS('tdt_gkey','')&&LS('tdt_gkoff','')==='1'}});continue}
       if(o){if(st==='photos'&&o.thumb&&!up.has(id)){const b=await getThumbBlob(id);if(b){const r=await sb(`/storage/v1/object/${SYNC.bucket}/${s.uid}/${id}`,{method:'POST',headers:{'Content-Type':'image/jpeg','x-upsert':'true'},body:b});if(!r.ok)throw new Error('could not send a photo preview ('+r.status+')');up.add(id)}}
         rows.push({id,store:st,upd:o.upd||1,deleted:false,data:o})}
       else if(tomb[id]){rows.push({id,store:st,upd:tomb[id],deleted:true,data:null});if(up.has(id)){up.delete(id);sb(`/storage/v1/object/${SYNC.bucket}/${s.uid}/${id}`,{method:'DELETE'}).catch(()=>{})}}
@@ -1902,13 +1907,13 @@ Object.assign(ACT,{
     <label class="f">Google Maps key</label><input id="gkeyIn" type="text" value="${esc(LS('tdt_gkey',''))}" placeholder="Starts with AIza" autocapitalize="off" autocorrect="off" spellcheck="false">
     <div class="mono" style="color:var(--mute);margin-top:6px">${sess()?'Paste it once. Sync carries it to your other devices.':'Kept on this device. Sign in to Sync and it reaches your other devices too.'}</div>
     <div class="row wrap" style="justify-content:flex-end;margin-top:14px"><button data-act="closemodal">Close</button>${LS('tdt_gkey','')?'<button class="ghost danger" data-act="gdropkey">Remove the key</button>':''}<button class="primary" data-act="gsavekey">Save and reload</button></div>`)},
-  gsavekey(){const k=($('#gkeyIn').value||'').trim();if(!k){toast('Paste the key first');return}LSset('tdt_gkey',k);LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty();location.reload()},
-  gdropkey(){LSset('tdt_gkey','');LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty();location.reload()}
+  gsavekey(){const k=($('#gkeyIn').value||'').trim();if(!k){toast('Paste the key first');return}LSset('tdt_gkey',k);LSset('tdt_gkoff','');LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty();location.reload()},
+  gdropkey(){LSset('tdt_gkey','');LSset('tdt_gkoff','1');LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty();location.reload()}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target&&e.target.id==='gq'){e.preventDefault();ACT.gsearch()}});
 
 /* ---------- start ---------- */
-(async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if(sess())queueSync(800);setTimeout(checkDuplicates,1500);if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
+(async()=>{await DB.open();for(const s of ['places','photos','maps','posts'])for(const o of await DB.all(s))S[s].set(o.id,o);render(true);backfillAreas();if((LS('tdt_gkey','')||LS('tdt_aikey',''))&&LS('tdt_cfg_sent','')!=='1'){LSset('tdt_cfg_sent','1');LSset('tdt_aikey_up','1');LSset('tdt_cfg_upd',String(Date.now()));dirty.cfg='cfg';persistDirty()}if(sess())queueSync(800);setTimeout(checkDuplicates,1500);if(!DB.ok)toast('This browser window is not saving your work. Use a normal (not private) window.',8000);window.TDT={S,ui,render,askImport,runImport,parseGmaps,buildKML,draftMap,isRough}})();
 </script>
 </body>
 </html>
