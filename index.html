@@ -1212,8 +1212,10 @@ async function runEnrich(){if(enBusy)return;enBusy=true;let ch=false;while(enQ.l
 async function backfillAreas(){const todo=[...S.places.values()].filter(p=>p.region===undefined);let ch=false;for(const p of todo){try{const pr=await reverse(p.lat,p.lng);p.region=(pr&&pr.county)||'';p.state=(pr&&pr.state)||'';if(pr&&!p.locality)p.locality=pr.city||pr.town||pr.village||'';if(pr&&!p.country)p.country=pr.country||'';save('places',p);ch=true}catch(e){break}await sleep(700)}if(ch)softRender()}
 
 /* ---------- photo import ---------- */
-const pickBtn=(kind,label)=>TOUCH?`<span class="pickwrap"><button class="primary" type="button" tabindex="-1">${label}</button><input type="file" multiple accept="image/*,video/*" data-pick="${kind}" aria-label="${label}"></span>`:`<button class="primary" data-act="${kind==='here'?'pickhere':'pick2'}">${label}</button>`;
+const pickBtn=(kind,label)=>TOUCH?`<span class="pickwrap"><button class="primary" type="button" tabindex="-1">${label}</button><input type="file" multiple accept="image/*,video/*" data-pick="${kind}" data-place="${kind==='here'?ui.placeId||'':''}" onchange="pickDone(this)" aria-label="${label}"></span>`:`<button class="primary" data-act="${kind==='here'?'pickhere':'pick2'}">${label}</button>`;
 function pickNote(n){if(IOS&&n===1)setTimeout(()=>toast('The iPhone handed over 1 photo. To add several at once: tap each photo so it gets a tick, then tap Add or Done at the top right of the photo screen.',12000),5200)}
+/* called straight from the input, so it still works if the screen was redrawn while the photo chooser was open */
+function pickDone(el){const fs=[...el.files],kind=el.dataset.pick;try{el.value=''}catch(e){}if(!fs.length)return;pickNote(fs.length);if(kind==='here'){const id=S.places.has(el.dataset.place)?el.dataset.place:ui.placeId;addToPlace(fs,id)}else{if($('#pickTip')&&$('#pickTip').checked)LSset('tdt_picktip','0');closeModal();askImport(fs)}}
 function pickMany(sel){const el=$(sel);el.multiple=true;el.setAttribute('multiple','');el.removeAttribute('capture');el.value='';el.click()}
 function isMedia(f){return /^image\/|^video\//.test(f.type)||/\.(jpe?g|png|heic|heif|webp|tiff?|mov|mp4|m4v)$/i.test(f.name)}
 function isVideo(f){return /^video\//.test(f.type)||/\.(mov|mp4|m4v)$/i.test(f.name)}
@@ -1652,7 +1654,7 @@ document.addEventListener('input',e=>{const el=e.target;
   if(el.dataset.link!==undefined&&el.type!=='checkbox'){const p=S.places.get(ui.placeId);p.links[+el.dataset.link][el.dataset.k]=el.value;save('places',p)}
 });
 document.addEventListener('change',e=>{const el=e.target;
-  if(el.dataset&&el.dataset.pick){const fs=[...el.files],kind=el.dataset.pick;el.value='';if(!fs.length)return;pickNote(fs.length);if(kind==='here')addToPlace(fs,ui.placeId);else{if($('#pickTip')&&$('#pickTip').checked)LSset('tdt_picktip','0');closeModal();askImport(fs)}return}
+  if(el.dataset&&el.dataset.pick)return;
   if(el.id==='file'){askImport([...el.files]);el.value='';return}
   if(el.id==='fileDoc'){const f=el.files[0];el.value='';if(f){const n=$('#itName');if(n&&$('#modal').style.display!=='none'){askItin.file=f;n.textContent=f.name;$('#itMsg').textContent=''}else askItin(f)}return}
   if(el.id==='restore'){if(el.files[0])importBackup(el.files[0]);el.value='';return}
