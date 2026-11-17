@@ -1133,7 +1133,7 @@ function setMode(m,text){ui.mode=m;$('#hint').style.display=m?'block':'none';$('
 /* ---------- places ---------- */
 function newPlace(lat,lng,o){const p=Object.assign({id:uid(),name:'Unnamed place',auto:true,type:'other',lat,lng,locality:'',country:'',notesPublic:'',notesPrivate:'',links:[],tags:[],maps:ui.mapId?[ui.mapId]:[],created:Date.now()},o);save('places',p);return p}
 function nearestPlace(lat,lng,radius){let best=null,bd=radius;for(const p of S.places.values()){const d=dist(lat,lng,p.lat,p.lng);if(d<=bd){bd=d;best=p}}return best}
-function openPlace(id,pan=true){if(ui.placeId!==id){ui.split=false;ui.psel=new Set();ui.gshow=false}ui.placeId=id;ui.postId=null;render();const p=S.places.get(id);if(p&&pan)map.setView([p.lat,p.lng],Math.max(map.getZoom(),14))}
+function openPlace(id,pan=true){if(ui.placeId!==id){ui.split=false;ui.psel=new Set();ui.gshow=false}ui.placeId=id;ui.postId=null;render();const p=S.places.get(id);if(p)queueGNear(id);if(p&&pan)map.setView([p.lat,p.lng],Math.max(map.getZoom(),14))}
 function deletePlace(id){for(const ph of photosOf(id)){ph.placeId=null;save('photos',ph)}for(const m of S.maps.values()){if((m.order||[]).includes(id)){m.order=m.order.filter(x=>x!==id);save('maps',m)}}remove('places',id)}
 function mergePlace(fromId,toId){const a=S.places.get(fromId),b=S.places.get(toId);if(!a||!b)return;
   for(const ph of photosOf(fromId)){ph.placeId=toId;save('photos',ph)}
@@ -1177,7 +1177,7 @@ function applyGeo(p,pr,force){const loc=pr.city||pr.town||pr.village||pr.localit
   if(p.auto||force){const nm=(poi||force==='search')&&pr.name?pr.name:[pr.street||pr.name,loc].filter(Boolean).join(', ');if(nm){p.name=nm;p.auto=false;p.rough=!((poi||force==='search')&&pr.name)}if(t&&p.type==='other'&&(poi||force==='search'))p.type=t}}
 async function reverse(lat,lng){const r=await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=en`);const j=await r.json();return j.features&&j.features[0]&&j.features[0].properties}
 async function runGeo(){if(geoBusy)return;geoBusy=true;let changed=false;
-  while(geoQ.length){const p=S.places.get(geoQ.shift());if(!p)continue;try{const pr=await reverse(p.lat,p.lng);if(pr){applyGeo(p,pr,false);save('places',p);changed=true;if(!p.rough)queueEnrich(p.id)}}catch(e){geoQ.length=0;break}await sleep(700);if(changed&&geoQ.length%5===0){softRender()}}
+  while(geoQ.length){const p=S.places.get(geoQ.shift());if(!p)continue;try{const pr=await reverse(p.lat,p.lng);if(pr){applyGeo(p,pr,false);save('places',p);changed=true;if(!p.rough)queueEnrich(p.id);queueGNear(p.id)}}catch(e){geoQ.length=0;break}await sleep(700);if(changed&&geoQ.length%5===0){softRender()}}
   geoBusy=false;if(changed)softRender()}
 function softRender(){const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&a.id!=='q'){drawPins();return}render()}
 
@@ -1193,7 +1193,7 @@ async function nearby(lat,lng){const k=lat.toFixed(4)+','+lng.toFixed(4);if(near
 const fmtD=d=>d<1000?Math.round(d)+' m':(d/1000).toFixed(1)+' km';
 function nearHtml(list,from){return list.slice(0,8).map((n,i)=>`<button class="sm nearb" data-act="asknear" data-id="${from}:${i}"><b>${esc(n.name)}</b> <span>${esc(n.kind)} · ${fmtD(n.d)}</span></button>`).join('')}
 async function loadNear(p){const box=$('#near');if(!box)return;try{const list=await nearby(p.lat,p.lng);if(ui.placeId!==p.id||!$('#near'))return;ACT._near=list;$('#near').innerHTML=list.length?nearHtml(list,'p'):'<span class="mono" style="color:var(--mute)">Nothing named on the open map within 500 m. Use the Google view above to read the name, then type it at the top.</span>'}catch(e){if($('#near'))$('#near').innerHTML='<span class="mono" style="color:var(--mute)">Nearby places need an internet connection.</span>'}}
-function moveTo(p,n){snap(p);p.lat=n.lat;p.lng=n.lng;if(n.name){p.name=n.name;p.auto=false;p.rough=false;p.gmaps='';const t=n.pr&&guessType(n.pr);if(t)p.type=t;p.info=undefined}save('places',p);map.closePopup();render();map.panTo([p.lat,p.lng]);refreshLocality(p);if(n.name)queueEnrich(p.id);toast(n.name?'Updated to '+n.name+'. Undo is in the place panel.':'Pin moved. Undo is in the place panel.',6000)}
+function moveTo(p,n){snap(p);p.lat=n.lat;p.lng=n.lng;delete p.gnear;delete p.gnone;p.gcand=[];if(n.name){p.name=n.name;p.auto=false;p.rough=false;p.gmaps='';const t=n.pr&&guessType(n.pr);if(t)p.type=t;p.info=undefined}save('places',p);map.closePopup();render();map.panTo([p.lat,p.lng]);refreshLocality(p);if(n.name)queueEnrich(p.id);toast(n.name?'Updated to '+n.name+'. Undo is in the place panel.':'Pin moved. Undo is in the place panel.',6000)}
 
 /* ---------- names, areas, Google view, contact details ---------- */
 function isRough(p){return !!p.auto||p.rough===true||(p.rough===undefined&&p.type==='other'&&!p.notesPublic&&!!p.locality&&p.name.endsWith(', '+p.locality))}
@@ -1434,6 +1434,7 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   return `<button class="ghost back" data-act="closeplace">← Back</button>
   <input class="title" type="text" value="${esc(p.name)}" data-f="name" data-store="places" data-id="${p.id}" aria-label="Place name">
   <div class="mono" style="color:var(--mute);padding-left:4px">${esc(placeLine(p)||'Location name not set')}${dates?' · '+dates:''}</div>
+  ${gNearHtml(p)}
   <div class="row" style="margin-top:8px"><select data-f="type" data-store="places" data-id="${p.id}" data-redraw="1" aria-label="Type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}"${k===p.type?' selected':''}>${v[0]}</option>`).join('')}</select></div>
   ${isPlan(p)?`<div class="tip" style="margin:10px 0 0">Planned stop${p.planDay?' · '+esc(p.planDay):''}. Not visited yet: a photo, a note or a rating marks it visited.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="went">I went</button><button class="sm danger ghost" data-act="nogo" data-id="${p.id}">Didn’t go: remove</button></div></div>`:''}
   <div class="row wrap" style="margin-top:10px;gap:10px"><div class="stars" role="group" aria-label="My rating">${[1,2,3,4,5].map(n=>`<button class="${(p.stars||0)>=n?'on':''}" data-act="stars" data-id="${n}" aria-label="${n} star${n>1?'s':''}">★</button>`).join('')}</div><div class="chips" style="margin:0">${Object.entries(VERD).map(([k,v])=>`<span class="chip${p.verdict===k?' on':''}" data-act="verdict" data-id="${k}">${v[0]}</span>`).join('')}</div></div>
@@ -1923,7 +1924,45 @@ async function gPick(id){const p=S.places.get(ui.placeId),a=$('#gask');if(!p||!a
       <div class="row wrap" style="margin-top:8px"><button class="primary sm" data-act="guse">Use this place</button><button class="sm" data-act="gpinonly">Only move the pin</button><button class="sm" data-act="gno">No</button></div>
       <div class="mono" style="color:var(--mute);margin-top:6px">“Use this place” sets the name, pin, type, website, phone and Google link. Your notes and photos are untouched.</div></div>`}
   catch(e){const box=$('#gask');if(box)box.innerHTML=`<span style="color:var(--rust);font-size:13px">Google could not give details for that place. ${esc(e&&e.message||'')}</span>`}}
-function gApply(p,lat,lng){snap(p);p.lat=lat;p.lng=lng}
+/* ---------- Google: what is listed at this pin (for places named only by street or by the open map) ---------- */
+const GSKIP=/^(route|street_address|premise|subpremise|locality|political|postal_code|neighborhood|sublocality|administrative_area|country|intersection|plus_code|geocode|bus_stop|transit_station|parking|atm|electric_vehicle_charging_station)/;
+const gCanAsk=()=>!!gKey()&&/^https?:/.test(location.protocol)&&navigator.onLine&&!gFail;
+const gWants=p=>p&&isRough(p)&&!p.gid&&!p.gnear;
+async function gNearList(lat,lng){await gmLoad();const {Place}=await google.maps.importLibrary('places');
+  const r=await Place.searchNearby({fields:['displayName','location','primaryType','types','googleMapsURI'],locationRestriction:{center:{lat,lng},radius:120},maxResultCount:12,rankPreference:'DISTANCE',language:'en'});
+  return (r.places||[]).filter(x=>x.displayName&&x.location&&!GSKIP.test(x.primaryType||(x.types||[])[0]||'')).map(x=>{const la=x.location.lat(),ln=x.location.lng(),ty=[x.primaryType,...(x.types||[])].filter(Boolean),t=gType(ty);return {id:x.id,name:x.displayName,lat:la,lng:ln,url:x.googleMapsURI||'',t:t||'',kind:t?TYPES[t][0]:String(x.primaryType||'').replace(/_/g,' '),d:Math.round(dist(lat,lng,la,ln))}}).sort((a,b)=>a.d-b.d).slice(0,6)}
+async function gUseId(p,c,auto){const {Place}=await google.maps.importLibrary('places');const pl=new Place({id:c.id});await pl.fetchFields({fields:['displayName','location','googleMapsURI','websiteURI','nationalPhoneNumber','internationalPhoneNumber','primaryType','types']});
+  p=S.places.get(p.id);if(!p)return false;snap(p);p.lat=pl.location.lat();p.lng=pl.location.lng();p.name=pl.displayName||c.name;p.gmaps=pl.googleMapsURI||c.url||'';p.gid=c.id;p.auto=false;p.rough=false;p.gfill=1;
+  const t=gType([pl.primaryType,...(pl.types||[])].filter(Boolean));if(t&&(!p.type||p.type==='other'))p.type=t;
+  const web=pl.websiteURI||'',ph=pl.internationalPhoneNumber||pl.nationalPhoneNumber||'',o=p.info||{};if(web||ph)p.info={website:web||o.website||'',phone:ph||o.phone||'',email:o.email||'',src:'Google'};
+  p.gcand=[];if(auto)p.gauto=1;else delete p.gauto;save('places',p);refreshLocality(p);return true}
+const gnQ=[];let gnBusy=false,gnErr='';
+function queueGNear(id){if(!gCanAsk()||!gWants(S.places.get(id)))return;if(!gnQ.includes(id))gnQ.push(id);runGNear()}
+async function runGNear(){if(gnBusy)return;gnBusy=true;let ch=false,bad=0;
+  while(gnQ.length){const id=gnQ.shift();let p=S.places.get(id);if(!gWants(p))continue;
+    try{const list=await gNearList(p.lat,p.lng);gnErr='';p=S.places.get(id);if(!gWants(p))continue;
+      const a=list[0],b=list[1];let done=false;
+      if(a&&a.t&&a.d<=40&&(!b||b.d>=Math.max(80,2.5*a.d))){try{done=await gUseId(p,a,true)}catch(e){}}
+      if(!done){p.gnear=Date.now();p.gcand=list.map(({id,name,lat,lng,url,kind,d})=>({id,name,lat,lng,url,kind,d}));save('places',p)}
+      else if(ui.placeId===id)toast('Google lists “'+S.places.get(id).name+'” at this pin. Name, website and phone filled in. Undo is at the top.',8000);
+      ch=true}
+    catch(e){gnErr=String(e&&e.message||e).slice(0,160);ch=true;if(++bad>=2){gnQ.length=0;break}}
+    await sleep(250)}
+  gnBusy=false;if(ch)softRender()}
+function gNearHtml(p){
+  if(p.gauto)return `<div class="tip" style="margin:8px 0 0">Matched to this Google listing because it is the only one at the pin. Website and phone come from Google.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="gautook">It’s right</button><button class="sm" data-act="gautoundo">Not right: undo</button></div></div>`;
+  if(p.gid||!isRough(p))return '';
+  if(!p.gnear)return gnErr?`<div class="mono" style="color:var(--rust);margin-top:6px">Google could not check this pin: ${esc(gnErr)}</div>`:gCanAsk()?`<div class="mono" id="gnwait" style="color:var(--mute);margin-top:6px">Checking what Google lists at this pin…</div>`:'';
+  const l=p.gcand||[];
+  if(!l.length)return p.gnone?'':`<div class="tip" style="margin:8px 0 0">Google lists no hotel, restaurant or other business within 120 m of this pin, so there is no contact info to pull. A private home or rental has no listing. Type its name at the top and add a link or phone under Contact, or search Google by name under Fix the location.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="gcandno">OK</button><button class="sm" data-act="gcandagain">Check again</button></div></div>`;
+  return `<div class="tip" style="margin:8px 0 0"><b>Which one is this?</b> Tap it and the name, website, phone and Google link fill in.<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${l.map((c,i)=>`<button class="sm nearb" data-act="gcand" data-id="${i}"><b>${esc(c.name)}</b> <span>${esc(c.kind||'')}${c.kind?' · ':''}${fmtD(c.d)}</span></button>`).join('')}</div><div class="row wrap" style="margin-top:6px"><button class="sm ghost" data-act="gcandno">None of these</button></div></div>`}
+Object.assign(ACT,{
+  async gcand(i){const p=S.places.get(ui.placeId),c=p&&(p.gcand||[])[+i];if(!c)return;toast('Asking Google for the details…');try{if(!gCanAsk())throw new Error('Google is not available right now');await gmLoad();if(await gUseId(p,c,false)){render();const q=S.places.get(p.id);map.panTo([q.lat,q.lng]);toast('Now “'+q.name+'”'+(q.info&&(q.info.website||q.info.phone)?', with contact details from Google.':'. Google has no website or phone for it.')+' Undo is in the place panel.',7000)}}catch(e){toast('Google could not give the details. '+(e&&e.message||''),6000)}},
+  gcandno(){const p=S.places.get(ui.placeId);if(!p)return;p.gcand=[];p.gnone=1;p.gnear=p.gnear||Date.now();save('places',p);render()},
+  gcandagain(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gnear;delete p.gnone;p.gcand=[];save('places',p);render();queueGNear(p.id)},
+  gautook(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gauto;save('places',p);render()},
+  gautoundo(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gauto;delete p.gid;delete p.gfill;p.gnear=Date.now();p.gcand=[];p.gnone=1;if(!undoLoc(p))save('places',p);render();map.panTo([p.lat,p.lng]);toast('Back to '+p.name)}});
+function gApply(p,lat,lng){snap(p);p.lat=lat;p.lng=lng;delete p.gnear;delete p.gnone;p.gcand=[]}
 function gInfo(p,web,phone){const c=p.info||{};if(!(web&&!c.website)&&!(phone&&!c.phone))return false;p.info={website:c.website||web||'',phone:c.phone||phone||'',email:c.email||'',src:c.website||c.phone?c.src:'Google'};if(!p.info.src)delete p.info.src;return true}
 const gNeeds=()=>[...S.places.values()].filter(p=>p.gid&&!p.gfill&&!(p.info&&p.info.website&&p.info.phone));
 async function gFillAll(manual){if(gFillAll.busy)return;const todo=gNeeds().slice(0,60);if(!todo.length){if(manual)toast('Every place linked to Google already has its details.');return}
