@@ -1218,6 +1218,8 @@ function pickNote(n){if(IOS&&n===1)setTimeout(()=>toast('The iPhone handed over 
 function pickDone(el){const fs=[...el.files],kind=el.dataset.pick;try{el.value=''}catch(e){}if(!fs.length)return;pickNote(fs.length);if(kind==='here'){const id=S.places.has(el.dataset.place)?el.dataset.place:ui.placeId;addToPlace(fs,id)}else{if($('#pickTip')&&$('#pickTip').checked)LSset('tdt_picktip','0');closeModal();askImport(fs)}}
 function pickMany(sel){const el=$(sel);el.multiple=true;el.setAttribute('multiple','');el.removeAttribute('capture');el.value='';el.click()}
 function isMedia(f){return /^image\/|^video\//.test(f.type)||/\.(jpe?g|png|heic|heif|webp|tiff?|mov|mp4|m4v)$/i.test(f.name)}
+function emptyNote(n){return `<p style="color:var(--rust)">${n} file${n>1?'s were':' was'} empty (0 bytes), so ${n>1?'they were':'it was'} skipped. This happens when photos are dragged straight out of the Mac Photos app, or when the original is still in iCloud. Use Add photos instead, or in Photos choose File &gt; Export &gt; Export Unmodified Original into a folder and add that folder.</p>`}
+function brokenPhotos(){return [...S.photos.values()].filter(p=>!p.thumb&&/\|0\|\d+$/.test(String(p.key||'')))}
 function isVideo(f){return /^video\//.test(f.type)||/\.(mov|mp4|m4v)$/i.test(f.name)}
 function metrics(src){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,64,64);const d=x.getImageData(0,0,64,64).data,g=new Float32Array(4096);for(let i=0;i<4096;i++)g[i]=.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2];
   let a=0,a2=0,n=0;for(let y=1;y<63;y++)for(let k=1;k<63;k++){const i=y*64+k,l=4*g[i]-g[i-1]-g[i+1]-g[i-64]-g[i+64];a+=l;a2+=l*l;n++}
@@ -1277,10 +1279,10 @@ async function collectDropped(dt){const out=[];const items=[...(dt.items||[])].m
   const walk=async e=>{if(e.isFile){await new Promise(r=>e.file(f=>{out.push(f);r()},()=>r()))}else if(e.isDirectory){const rd=e.createReader();for(;;){const batch=await new Promise(r=>rd.readEntries(r,()=>r([])));if(!batch.length)break;for(const c of batch)await walk(c)}}};
   for(const e of items)await walk(e);return out}
 
-function askImport(files){files=files.filter(isMedia);if(!files.length){toast('No photos or videos found in that drop');return}
+function askImport(files){files=files.filter(isMedia);const empty=files.filter(f=>!f.size).length;files=files.filter(f=>f.size>0);if(!files.length){if(empty)modal(`<h2>Nothing could be read</h2>${emptyNote(empty)}<div class="row" style="justify-content:flex-end"><button class="primary" data-act="closemodal">OK</button></div>`);else toast('No photos or videos found in that drop');return}
   askImport.files=files;const cur=ui.mapId;
   modal(`<h2>Add ${files.length} photo${files.length>1?'s':''} / video${files.length>1?'s':''}</h2>
-  <p style="color:var(--mute);margin:4px 0 0">Location and date are read from each file. A small preview is kept on this device; your originals are not copied or uploaded.</p>
+  <p style="color:var(--mute);margin:4px 0 0">Location and date are read from each file. A small preview is kept on this device; your originals are not copied or uploaded.</p>${empty?emptyNote(empty):''}
   <label class="f">Put them on this map</label>
   <select id="impMap"><option value="">No map — just add to my places</option><option value="__new"${cur?'':' selected'}>New map…</option>${[...S.maps.values()].map(m=>`<option value="${m.id}"${m.id===cur?' selected':''}>${esc(m.name)}</option>`).join('')}</select>
   <input id="impName" type="text" placeholder="New map name, e.g. Ticino research Sep 2026" style="margin-top:6px;${cur?'display:none':''}">
@@ -1398,7 +1400,7 @@ function vPhotos(){const base=photoList();const f=ui.photoFilter;const cnt={all:
   const ps=photoPick(base,f);
   const shown=ps.slice(0,ui.photoLimit);const chip=(id,label)=>`<span class="chip${f===id?' on':''}" data-act="pf" data-id="${id}">${label} ${cnt[id]}</span>`;
   return `<div class="chips">${chip('all','All')}${chip('best','★ Best')}${chip('unused','Best, not posted yet')}${chip('edit','✎ To edit')}${chip('rest','Not best')}${chip('unplaced','No location')}${cnt.bytime||f==='bytime'?chip('bytime','By time'):''}</div>
-  <div class="chips"><span class="chip${ui.inView?' on':''}" data-act="inview" title="Zoom the map to an area, then turn this on">Only what the map shows</span><span class="chip${ui.selMode?' on':''}" data-act="selmode">Select several</span></div>
+  <div class="chips"><span class="chip${ui.inView?' on':''}" data-act="inview" title="Zoom the map to an area, then turn this on">Only what the map shows</span><span class="chip${ui.selMode?' on':''}" data-act="selmode">Select several</span>${(()=>{const b=brokenPhotos().length;return b?`<span class="chip" style="background:var(--rust);color:#fff" data-act="delbroken">Remove ${b} empty photo${b>1?'s':''} (did not import)</span>`:''})()}</div>
   ${ui.sel.size?`<div class="row wrap" style="margin-bottom:10px"><b>${ui.sel.size} selected</b><button class="sm" data-act="starsel">★ Best</button><button class="sm" data-act="editsel">✎ To edit</button><button class="sm" data-act="namesel">Copy filenames</button><button class="primary sm" data-act="placesel">Pin on map</button><button class="sm danger" data-act="delsel">Remove</button><button class="sm ghost" data-act="clearsel">Clear</button></div>`
    :`<div class="row wrap" style="margin-bottom:10px">${ps.length>1?`<button class="sm dark" data-act="bestlist">Suggest the best of these ${ps.length}</button>`:''}${ps.length?`<button class="sm" data-act="ailist" title="Uses Google Gemini with your own key">Rate with AI</button>`:''}${f==='unplaced'&&ps.length?`<button class="sm primary" data-act="timeplace">Place these by the time they were taken</button>`:''}${f!=='unplaced'&&f!=='bytime'&&cnt.unplaced&&!ui.sel.size?`<button class="sm primary" data-act="timeplace">Place the ${cnt.unplaced} with no location by time</button>`:''}${f==='bytime'&&ps.length?`<button class="sm primary" data-act="okbytime">They look right</button>`:''}${(f==='edit'||f==='unused'||f==='best')&&ps.length?`<button class="sm" data-act="copynames">Copy ${ps.length} filename${ps.length>1?'s':''}</button>`:''}${f==='rest'&&ps.length?`<button class="sm danger" data-act="delrest">Remove all ${ps.length} shown</button>`:''}</div>`}
   ${f==='edit'&&ps.length?`<div class="tip">These need fixing in Apple Photos. Paste a filename into the Photos search box to find the original, edit it there, then drag the fixed photo in here and remove the old preview.</div>`:''}
@@ -1578,6 +1580,7 @@ const ACT={
   async delrest2(){const ids=photoList().filter(p=>!p.star).map(p=>p.id);closeModal();ui.pundoRv=false;await dropPhotos(ids);ui.photoFilter='all';render();toast('Removed '+ids.length+'. Undo is at the bottom.',6000)},
   clearsel(){ui.sel.clear();render()},
   placesel(){setMode({kind:'photos'},`${TAP} the map where these ${ui.sel.size} were taken`);if(PHONE()&&ui.size==='list')setSize('split')},
+  async delbroken(){const ids=brokenPhotos().map(p=>p.id);if(!ids.length)return;ui.sel.clear();ui.pundoRv=false;await dropPhotos(ids);render();toast('Removed '+ids.length+' empty photos. Undo is at the bottom.',7000)},
   async delsel(){const ids=[...ui.sel];ui.sel.clear();ui.pundoRv=false;await dropPhotos(ids);render()},
   zoom(id,el){const box=el&&el.parentElement;const ids=box?[...box.querySelectorAll(':scope > [data-id]')].map(x=>x.dataset.id):[id];ui.rv={ids,i:Math.max(0,ids.indexOf(id)),dirty:false};$('#light').style.display='flex';ACT._rv()},
   _rv(){const r=ui.rv;if(!r||!r.ids.length){ACT.rvclose();return}r.i=Math.min(Math.max(r.i,0),r.ids.length-1);const ph=S.photos.get(r.ids[r.i]);if(!ph){r.ids.splice(r.i,1);ACT._rv();return}const pl=ph.placeId&&S.places.get(ph.placeId);
@@ -1732,7 +1735,7 @@ async function mergeBackup(j){const tomb=getTomb(),inT=j.tomb||{},stores=['place
   for(const [id,u] of Object.entries(j.thumbs||{})){if(!S.photos.has(id))continue;if(!fresh.has(id)&&await getThumbBlob(id))continue;TH.url.delete(id);await putThumb(id,await dataURLToBlob(u))}
   _idx=null;persistDirty();if(sess())queueSync(1500);return {add,upd,same,gone}}
 
-async function addToPlace(files,placeId){files=files.filter(isMedia);const p=S.places.get(placeId);if(!p||!files.length)return;
+async function addToPlace(files,placeId){files=files.filter(isMedia);const empty=files.filter(f=>!f.size).length;files=files.filter(f=>f.size>0);if(empty)toast(empty+' empty file'+(empty>1?'s':'')+' skipped (dragged from Photos or still in iCloud). Use Add photos instead.',9000);const p=S.places.get(placeId);if(!p||!files.length)return;
   modal(`<h2>Adding to ${esc(p.name)}…</h2><progress id="impProg" max="${files.length}" value="0"></progress><div id="impMsg" class="mono" style="margin-top:8px"></div>`);
   const keys=new Set([...S.photos.values()].map(x=>x.key));const idx=shotIndex();let added=0,dup=0;
   for(let i=0;i<files.length;i++){const f=files[i];$('#impProg').value=i+1;$('#impMsg').textContent=`${i+1} of ${files.length}`;
