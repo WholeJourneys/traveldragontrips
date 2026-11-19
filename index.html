@@ -1132,6 +1132,7 @@ function setMode(m,text){ui.mode=m;$('#hint').style.display=m?'block':'none';$('
 
 /* ---------- places ---------- */
 function newPlace(lat,lng,o){const p=Object.assign({id:uid(),name:'Unnamed place',auto:true,type:'other',lat,lng,locality:'',country:'',notesPublic:'',notesPrivate:'',links:[],tags:[],maps:ui.mapId?[ui.mapId]:[],created:Date.now()},o);save('places',p);return p}
+function mapNear(lat,lng,radius=60000){let best=null,bd=radius;for(const p of S.places.values()){if(!(p.maps||[]).length)continue;const d=dist(lat,lng,p.lat,p.lng);if(d<bd){for(const id of p.maps){if(S.maps.get(id)){bd=d;best=S.maps.get(id);break}}}}return best}
 function nearestPlace(lat,lng,radius){let best=null,bd=radius;for(const p of S.places.values()){const d=dist(lat,lng,p.lat,p.lng);if(d<=bd){bd=d;best=p}}return best}
 function openPlace(id,pan=true){if(ui.placeId!==id){ui.split=false;ui.psel=new Set();ui.gshow=false}ui.placeId=id;ui.postId=null;render();const p=S.places.get(id);if(p)queueGNear(id);if(p&&pan)map.setView([p.lat,p.lng],Math.max(map.getZoom(),14))}
 function deletePlace(id){for(const ph of photosOf(id)){ph.placeId=null;save('photos',ph)}for(const m of S.maps.values()){if((m.order||[]).includes(id)){m.order=m.order.filter(x=>x!==id);save('maps',m)}}remove('places',id)}
@@ -1579,7 +1580,22 @@ const ACT={
   delrest(){const n=photoList().filter(p=>!p.star).length;modal(`<h2>Remove ${n} photos from the app?</h2><p>They stay in Apple Photos; only the app's copies go. Places left with no photos keep their notes.</p><div class="row" style="justify-content:flex-end"><button data-act="closemodal">Keep them</button><button class="primary" data-act="delrest2">Remove ${n}</button></div>`)},
   async delrest2(){const ids=photoList().filter(p=>!p.star).map(p=>p.id);closeModal();ui.pundoRv=false;await dropPhotos(ids);ui.photoFilter='all';render();toast('Removed '+ids.length+'. Undo is at the bottom.',6000)},
   clearsel(){ui.sel.clear();render()},
-  placesel(){setMode({kind:'photos'},`${TAP} the map where these ${ui.sel.size} were taken`);if(PHONE()&&ui.size==='list')setSize('split')},
+  placesel(){const n=ui.sel.size;if(!n)return;modal(`<h2>Where ${n===1?'was this':'were these '+n} taken?</h2><p style="color:var(--mute);margin:4px 0 10px">Type the place as you would in Google Maps: a hotel, beach, restaurant, trail or town. It can be anywhere in the world, whichever map you are in now.</p><div class="row"><input id="pq" type="text" placeholder="e.g. Amagatay, Menorca" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="primary" data-act="pinsearch">Search</button></div><div id="pqr" style="margin-top:10px"></div><div class="row wrap" style="margin-top:14px;justify-content:space-between"><button data-act="pintap">${TAP} the map instead</button><button data-act="closemodal">Cancel</button></div>`);const i=$('#pq');i.focus();i.onkeydown=e=>{if(e.key==='Enter')ACT.pinsearch()}},
+  pintap(){closeModal();setMode({kind:'photos'},`${TAP} the map where these ${ui.sel.size} were taken`);if(PHONE()&&ui.size==='list')setSize('split')},
+  async pinsearch(){const q=(($('#pq')||{}).value||'').trim(),out=$('#pqr');if(!q||!out)return;out.innerHTML='<span class="mono" style="color:var(--mute)">Searching…</span>';let list=[],src='';
+    if(gCanAsk()){try{await gmLoad();const {Place}=await google.maps.importLibrary('places');const r=await Place.searchByText({textQuery:q,fields:['displayName','location','formattedAddress'],maxResultCount:8,language:'en'});
+      list=(r.places||[]).filter(x=>x.location).map(x=>({gid:x.id,name:x.displayName||'',addr:x.formattedAddress||'',lat:x.location.lat(),lng:x.location.lng()}));src='Google'}catch(e){}}
+    if(!list.length){try{const r=await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8&lang=en`);list=((await r.json()).features||[]).map(f=>{const pr=f.properties,[lng,lat]=f.geometry.coordinates;return {pr,name:pr.name||pr.street||'',addr:[pr.osm_value,pr.city||pr.county,pr.state,pr.country].filter(Boolean).join(' · '),lat,lng}});src='map'}catch(e){}}
+    ACT._pq=list;const o=$('#pqr');if(!o)return;
+    o.innerHTML=list.length?list.map((x,i)=>{const m=mapNear(x.lat,x.lng);return `<button class="sm nearb" style="display:block;width:100%;text-align:left;margin-bottom:6px" data-act="pinres" data-id="${i}"><b>${esc(x.name||q)}</b> <span>${esc(x.addr)}${m?` · your ${esc(m.name)} map`:''}</span></button>`}).join('')+(src==='map'&&gKey()?'<div style="color:var(--mute);font-size:12px">Google did not answer, so these come from the free map.</div>':''):'<span style="color:var(--mute);font-size:14px">Nothing found. Try adding the town or island, e.g. “Amagatay, Menorca”.</span>'},
+  async pinres(i){const x=(ACT._pq||[])[+i];if(!x)return;closeModal();const ids=[...ui.sel].filter(id=>S.photos.get(id));if(!ids.length)return;
+    const m=mapNear(x.lat,x.lng);let p=nearestPlace(x.lat,x.lng,x.gid?40:80);if(p&&x.gid&&p.gid&&p.gid!==x.gid)p=null;
+    if(!p){p=newPlace(x.lat,x.lng,{name:x.name||'Unnamed place',auto:!x.name,maps:m?[m.id]:[]});if(x.pr){applyGeo(p,x.pr,'search');if(x.name)p.name=x.name;p.auto=false;save('places',p)}}
+    else if(m&&!(p.maps||[]).includes(m.id)){p.maps=[...(p.maps||[]),m.id];save('places',p)}
+    if(x.gid&&p.gid!==x.gid){try{await gUseId(p,{id:x.gid,name:x.name})}catch(e){}p=S.places.get(p.id)||p}else if(!x.gid&&!x.pr)queueGeocode(p.id);
+    for(const id of ids){const ph=S.photos.get(id);ph.placeId=p.id;ph.lat=p.lat;ph.lng=p.lng;ph.byTime=false;save('photos',ph)}
+    ui.sel.clear();if(!x.gid)queueGNear(p.id);render();
+    toast(`${ids.length} photo${ids.length>1?'s':''} pinned to “${p.name}”`+(m?` in your ${m.name} map`:' (not in any map yet)'),7000)},
   async delbroken(){const ids=brokenPhotos().map(p=>p.id);if(!ids.length)return;ui.sel.clear();ui.pundoRv=false;await dropPhotos(ids);render();toast('Removed '+ids.length+' empty photos. Undo is at the bottom.',7000)},
   async delsel(){const ids=[...ui.sel];ui.sel.clear();ui.pundoRv=false;await dropPhotos(ids);render()},
   zoom(id,el){const box=el&&el.parentElement;const ids=box?[...box.querySelectorAll(':scope > [data-id]')].map(x=>x.dataset.id):[id];ui.rv={ids,i:Math.max(0,ids.indexOf(id)),dirty:false};$('#light').style.display='flex';ACT._rv()},
