@@ -843,6 +843,12 @@ input[type=password]{font:inherit;width:100%;padding:8px 10px;border:1px solid v
 .psec{border:1px solid #e6cfae;background:#fbf3e8;border-radius:10px;padding:2px 10px 10px;margin-top:14px}
 .psec h3{margin-top:10px}
 .psec .card{margin-bottom:8px}
+.phsafe{font-size:12.5px;color:var(--mute);background:#eef3ee;border-radius:8px;padding:7px 10px;margin-bottom:10px}
+.selbar{border:2px solid var(--pine,#2f5a41);border-radius:10px;padding:8px 10px;margin-bottom:10px;background:#fff;position:sticky;top:0;z-index:3}
+.ptools{border:1px solid var(--line);border-radius:10px;padding:4px 10px 10px;margin-bottom:10px;background:#fff}
+.pth{font-size:12px;font-weight:700;color:var(--mute);margin:8px 0 4px}
+.phelp>div{font-size:12.5px;color:var(--mute);margin-bottom:6px;line-height:1.4}
+.phelp button{margin-right:6px}
 .pitem{border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px;background:#fff}
 .pitem input{flex:1;min-width:0}
 .pnotes{min-height:150px}
@@ -1414,16 +1420,30 @@ function photoList(){let ps=[...S.photos.values()].filter(inScope).sort((a,b)=>b
   return ps}
 function vPhotos(){const base=photoList();const f=ui.photoFilter;const cnt={all:base.length,unplaced:base.filter(p=>!p.placeId).length,best:base.filter(p=>p.star).length,bytime:base.filter(p=>p.byTime).length};cnt.rest=cnt.all-cnt.best;cnt.edit=base.filter(p=>p.edit).length;cnt.unused=photoPick(base,'unused').length;
   const ps=photoPick(base,f);
-  const shown=ps.slice(0,ui.photoLimit);const chip=(id,label)=>`<span class="chip${f===id?' on':''}" data-act="pf" data-id="${id}">${label} ${cnt[id]}</span>`;
+  const shown=ps.slice(0,ui.photoLimit);const chip=(id,label,tip)=>`<span class="chip${f===id?' on':''}" data-act="pf" data-id="${id}" title="${tip||''}">${label} ${cnt[id]}</span>`;
   const {pm,pp}=photoScope(),all=[...S.photos.values()],mapsL=[...S.maps.values()].sort((a,b)=>(b.created||0)-(a.created||0)),mc=id=>all.filter(ph=>{const pl=ph.placeId&&S.places.get(ph.placeId);return id==='none'?(!pl||!(pl.maps||[]).length):pl&&(pl.maps||[]).includes(id)}).length;
   const plL=(pm&&pm!=='none'?(syncOrder(S.maps.get(pm)),S.maps.get(pm).order.map(id=>S.places.get(id)).filter(Boolean)):[...S.places.values()].filter(pl=>pm!=='none'||!(pl.maps||[]).length).sort((a,b)=>a.name.localeCompare(b.name))).map(pl=>[pl,photosOf(pl.id).length]).filter(x=>x[1]);
   const scope=`<div class="row wrap pscope" style="gap:6px;margin-bottom:10px"><select id="photoMapSel" aria-label="Show photos from which map" style="flex:1;min-width:150px"><option value="">All maps · ${all.length} photos</option>${mapsL.map(m=>`<option value="${m.id}"${pm===m.id?' selected':''}>${esc(m.name)} · ${mc(m.id)}</option>`).join('')}<option value="none"${pm==='none'?' selected':''}>Not on any map · ${mc('none')}</option></select><select id="photoPlaceSel" aria-label="Show photos from one place" style="flex:1;min-width:150px"><option value="">${pm?'Every place on this map':'Every place'}</option>${plL.map(([pl,n])=>`<option value="${pl.id}"${pp===pl.id?' selected':''}>${esc(pl.name)} · ${n}</option>`).join('')}</select>${pm||pp?'<button class="sm ghost" data-act="pscopeclear">Show all</button>':''}</div>`;
-  return `${scope}<div class="chips">${chip('all','All')}${chip('best','★ Best')}${chip('unused','Best, not posted yet')}${chip('edit','✎ To edit')}${chip('rest','Not best')}${chip('unplaced','No location')}${cnt.bytime||f==='bytime'?chip('bytime','By time'):''}</div>
-  <div class="chips"><span class="chip${ui.inView?' on':''}" data-act="inview" title="Zoom the map to an area, then turn this on">Only what the map shows</span><span class="chip${ui.selMode?' on':''}" data-act="selmode">Select several</span>${(()=>{const b=brokenPhotos().length;return b?`<span class="chip" style="background:var(--rust);color:#fff" data-act="delbroken">Remove ${b} empty photo${b>1?'s':''} (did not import)</span>`:''})()}</div>
-  ${ui.sel.size?`<div class="row wrap" style="margin-bottom:10px"><b>${ui.sel.size} selected</b><button class="sm" data-act="starsel">★ Best</button><button class="sm" data-act="editsel">✎ To edit</button><button class="sm" data-act="namesel">Copy filenames</button><button class="primary sm" data-act="placesel">Pin on map</button><button class="sm danger" data-act="delsel">Remove</button><button class="sm ghost" data-act="clearsel">Clear</button></div>`
-   :`<div class="row wrap" style="margin-bottom:10px">${ps.length>1?`<button class="sm dark" data-act="bestlist">Suggest the best of these ${ps.length}</button>`:''}${ps.length?`<button class="sm" data-act="ailist" title="Uses Google Gemini with your own key">Rate with AI</button>`:''}${f==='unplaced'&&ps.length?`<button class="sm primary" data-act="timeplace">Place these by the time they were taken</button>`:''}${f!=='unplaced'&&f!=='bytime'&&cnt.unplaced&&!ui.sel.size?`<button class="sm primary" data-act="timeplace">Place the ${cnt.unplaced} with no location by time</button>`:''}${f==='bytime'&&ps.length?`<button class="sm primary" data-act="okbytime">They look right</button>`:''}${(f==='edit'||f==='unused'||f==='best')&&ps.length?`<button class="sm" data-act="copynames">Copy ${ps.length} filename${ps.length>1?'s':''}</button>`:''}${f==='rest'&&ps.length?`<button class="sm danger" data-act="delrest">Remove all ${ps.length} shown</button>`:''}</div>`}
-  ${f==='edit'&&ps.length?`<div class="tip">These need fixing in Apple Photos. Paste a filename into the Photos search box to find the original, edit it there, then drag the fixed photo in here and remove the old preview.</div>`:''}
-  ${ps.length?`<div style="color:var(--mute);font-size:13px;margin-bottom:8px">${ui.selMode?'Click photos to select them.':f==='unplaced'?'Most can be placed by time: each goes to the place of the photo you took closest in time. Pin the rest by hand: select the ones that belong together, then Pin on map.':f==='bytime'?'Each was placed with the photo you took closest in time. Open one to see its place; select any that are wrong and Pin on map.':'Click a photo to look through them one by one, mark the best and remove the rest.'}</div>`:''}
+  const tools=ui.ptools||f!=='all'||ui.inView;
+  const selN=ui.sel.size,selPh=[...ui.sel].map(id=>S.photos.get(id)).filter(Boolean),allStar=selN&&selPh.every(p=>p.star),allEdit=selN&&selPh.every(p=>p.edit);
+  return `${scope}
+  <div class="phsafe">Your originals in Apple Photos are never changed or deleted from here. This app keeps its own small copies to put on maps and posts.</div>
+  ${(()=>{const b=brokenPhotos().length;return b?`<div class="row" style="margin-bottom:8px"><span class="chip" style="background:var(--rust);color:#fff" data-act="delbroken">Remove ${b} empty photo${b>1?'s':''} (did not import)</span></div>`:''})()}
+  ${selN?`<div class="selbar"><div class="row wrap" style="gap:6px"><b class="grow">${selN} selected</b><button class="sm ghost" data-act="clearsel">Clear</button></div>
+     <div class="row wrap" style="gap:6px;margin-top:8px"><button class="sm" data-act="starsel">${allStar?'Unmark best':'★ Mark as best'}</button><button class="sm primary" data-act="placesel">Move to a place</button><button class="sm" data-act="editsel" title="A reminder only: the photo still needs fixing in Apple Photos or Snapseed">${allEdit?'Unflag':'Flag to fix later'}</button><button class="sm danger" data-act="delsel">Remove from app</button></div></div>`
+   :`<div class="row wrap" style="gap:6px;margin-bottom:8px"><span class="grow" style="color:var(--mute);font-size:13px">${ps.length} photo${ps.length===1?'':'s'}${f!=='all'?' (filtered)':''}. Tap one to look through them.</span><button class="sm${ui.selMode?' primary':''}" data-act="selmode">${ui.selMode?'Done selecting':'Select'}</button><button class="sm${tools?' on':''}" data-act="ptools">${tools?'Hide tidy-up tools':'Tidy-up tools'}</button></div>`}
+  ${!selN&&cnt.unplaced&&f!=='unplaced'?`<div class="tip row wrap" style="gap:8px"><span class="grow">${cnt.unplaced} photo${cnt.unplaced>1?'s have':' has'} no location, so ${cnt.unplaced>1?'they are':'it is'} not on the map.</span><button class="sm primary" data-act="timeplace">Place by time taken</button><button class="sm" data-act="pf" data-id="unplaced">Show ${cnt.unplaced>1?'them':'it'}</button></div>`:''}
+  ${tools&&!selN?`<div class="ptools">
+    <div class="pth">Show only</div>
+    <div class="chips">${chip('all','All')}${chip('best','★ Best','Photos you or the app marked as your best')}${chip('unused','Best, not in a post yet','Best photos you have not used in a post')}${chip('edit','Flagged to fix','Photos you flagged to brighten or crop in Apple Photos or Snapseed')}${chip('rest','Not best')}${chip('unplaced','No location')}${cnt.bytime||f==='bytime'?chip('bytime','Placed by time','Placed automatically by the time taken: check they look right'):''}<span class="chip${ui.inView?' on':''}" data-act="inview">Only the area on screen</span></div>
+    <div class="pth">Helpers</div>
+    <div class="phelp">${ps.length>1?`<div><button class="sm" data-act="bestlist">Suggest my best</button> Marks the sharpest of each set of look-alike shots as ★ Best. Nothing is removed.</div>`:''}
+    ${ps.length?`<div><button class="sm" data-act="ailist">Rate with AI</button> Google Gemini scores each photo and writes a caption. Nothing is removed.</div>`:''}
+    ${f==='edit'&&ps.length?`<div><button class="sm" data-act="copynames">Copy ${ps.length} filename${ps.length>1?'s':''}</button> Paste one into the Apple Photos search box to find the original and fix it there.</div>`:''}
+    ${f==='bytime'&&ps.length?`<div><button class="sm primary" data-act="okbytime">They look right</button> Clears the "placed by time" check.</div>`:''}
+    ${f==='rest'&&ps.length?`<div><button class="sm danger" data-act="delrest">Remove all ${ps.length} not-best</button> Takes them out of this app only. You can undo.</div>`:''}</div>
+  </div>`:''}
+  ${ps.length&&ui.selMode&&!selN?`<div style="color:var(--mute);font-size:13px;margin-bottom:8px">Tap photos to select them.</div>`:''}
   <div class="strip g3">${shown.map(phTile).join('')}</div>
   ${ps.length>shown.length?`<button style="width:100%;margin-top:10px" data-act="morephotos">Show more (${ps.length-shown.length})</button>`:''}
   ${ps.length?'':`<div class="empty">No photos here${ui.inView?' in this part of the map':''}${pm||pp?' for this '+(pp?'place':'map'):''}.</div>`}`}
@@ -1577,7 +1597,7 @@ const ACT={
   sheetall(){closeModal();exportSheet([...S.places.values()].sort((a,b)=>(a.country||'').localeCompare(b.country||'')||a.name.localeCompare(b.name)),'')},
   stars(n){const p=S.places.get(ui.placeId);if(!p)return;n=+n;p.stars=p.stars===n?0:n;if(p.stars&&!p.verdict)p.verdict='seen';save('places',p);render()},
   verdict(k){const p=S.places.get(ui.placeId);if(!p)return;p.verdict=p.verdict===k?'':k;save('places',p);render()},
-  editsel(){for(const id of ui.sel){const ph=S.photos.get(id);if(ph){ph.edit=true;save('photos',ph)}}ui.sel.clear();render();toast('Marked ✎ To edit')},
+  editsel(){const ps=[...ui.sel].map(id=>S.photos.get(id)).filter(Boolean),v=!ps.every(p=>p.edit);for(const ph of ps){ph.edit=v;save('photos',ph)}ui.sel.clear();render();toast(v?'Flagged to fix later. Find them under Tidy-up tools › Flagged to fix.':'Flag removed')},
   namesel(){copy([...ui.sel].map(id=>S.photos.get(id)).filter(Boolean).map(p=>p.name).join('\n'))},
   copynames(){copy(photoPick(photoList(),ui.photoFilter).map(p=>p.name).join('\n'))},
   ppick(id){const po=S.posts.get(ui.postId);if(!po)return;const a=(po.photoIds||[]).filter(x=>S.photos.has(x));po.photoIds=a.includes(id)?a.filter(x=>x!==id):[...a,id];save('posts',po);render()},
@@ -1589,7 +1609,8 @@ const ACT={
   photo(id,el){const ph=S.photos.get(id);if(!ph)return;if(ui.selMode||ui.sel.size||!ph.placeId){ui.sel.has(id)?ui.sel.delete(id):ui.sel.add(id);render()}else ACT.zoom(id,el)},
   selmode(){ui.selMode=!ui.selMode;if(!ui.selMode)ui.sel.clear();render()},
   inview(){ui.inView=!ui.inView;ui.photoLimit=240;render()},
-  starsel(){for(const id of ui.sel){const ph=S.photos.get(id);if(ph){ph.star=true;save('photos',ph)}}ui.sel.clear();render()},
+  starsel(){const ps=[...ui.sel].map(id=>S.photos.get(id)).filter(Boolean),v=!ps.every(p=>p.star);for(const ph of ps){ph.star=v;save('photos',ph)}ui.sel.clear();render();toast(v?'Marked ★ Best':'No longer marked best')},
+  ptools(){const on=ui.ptools||ui.photoFilter!=='all'||ui.inView;ui.ptools=!on;if(on){ui.photoFilter='all';ui.inView=false}render()},
   async bestlist(){const f=ui.photoFilter,base=photoList();const list=f==='unplaced'?base.filter(p=>!p.placeId):base;ACT._best(await suggestBest(list))},
   ailist(){askAI(photoPick(photoList(),ui.photoFilter))},
   runai(){runAI()},
@@ -1617,7 +1638,8 @@ const ACT={
     ui.sel.clear();if(!x.gid)queueGNear(p.id);render();
     toast(`${ids.length} photo${ids.length>1?'s':''} pinned to “${p.name}”`+(m?` in your ${m.name} map`:' (not in any map yet)'),7000)},
   async delbroken(){const ids=brokenPhotos().map(p=>p.id);if(!ids.length)return;ui.sel.clear();ui.pundoRv=false;await dropPhotos(ids);render();toast('Removed '+ids.length+' empty photos. Undo is at the bottom.',7000)},
-  async delsel(){const ids=[...ui.sel];ui.sel.clear();ui.pundoRv=false;await dropPhotos(ids);render()},
+  async delsel(){const n=ui.sel.size;if(!n)return;modal(`<h2>Remove ${n} photo${n>1?'s':''} from this app?</h2><p>Only the app's copies go. Your originals in Apple Photos are not touched. Places and notes stay. You can undo straight after.</p><div class="row" style="justify-content:flex-end"><button data-act="closemodal">Keep</button><button class="primary" data-act="delsel2">Remove ${n}</button></div>`)},
+  async delsel2(){const ids=[...ui.sel];closeModal();ui.sel.clear();ui.selMode=false;ui.pundoRv=false;await dropPhotos(ids);render();toast('Removed '+ids.length+'. Undo is at the bottom.',6000)},
   zoom(id,el){const box=el&&el.parentElement;const ids=box?[...box.querySelectorAll(':scope > [data-id]')].map(x=>x.dataset.id):[id];ui.rv={ids,i:Math.max(0,ids.indexOf(id)),dirty:false};$('#light').style.display='flex';ACT._rv()},
   _rv(){const r=ui.rv;if(!r||!r.ids.length){ACT.rvclose();return}r.i=Math.min(Math.max(r.i,0),r.ids.length-1);const ph=S.photos.get(r.ids[r.i]);if(!ph){r.ids.splice(r.i,1);ACT._rv();return}const pl=ph.placeId&&S.places.get(ph.placeId);
     thumbUrl(ph.id).then(u=>{$('#light img').src=u||''});$('#lightCap').textContent=`${r.i+1} / ${r.ids.length} · ${ph.name} · ${fmtDate(ph.date)}${pl?' · '+pl.name:''}${ph.kind==='video'?' · video (first frame)':''}${ph.ai?' · AI '+ph.ai+'/10':''}`;$('#rvStar').textContent=ph.star?'★ Best':'☆ Best';$('#rvStar').className=ph.star?'primary':'';$('#rvEdit').className=ph.edit?'primary':'';if(document.activeElement!==$('#rvCap')||$('#rvCap').dataset.id!==ph.id){$('#rvCap').value=ph.cap||'';$('#rvCap').dataset.id=ph.id}},
