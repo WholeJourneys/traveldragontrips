@@ -987,6 +987,12 @@ aside,header{min-width:0}
 details.sec.flat{border-top:0;margin-top:6px;padding-top:0}
 details.sec.flat>summary{display:none}
 @media(max-width:820px){.ptabs{top:-4px;margin:12px -16px 4px;padding:0 8px}.ptabs button{padding:11px 9px 10px;font-size:14px}}
+.qmore{margin:12px 0 0;font-size:13.5px;color:var(--mute);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.qrow{display:flex;gap:8px;align-items:center;padding:10px 2px;border-bottom:1px solid var(--line)}
+.qrow .t{font-weight:600}.qrow .s{font-size:13px;color:var(--mute);line-height:1.4}
+.qbar{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:8px 8px 8px 12px;border-radius:var(--r-ctl);background:var(--note);border:1px solid var(--note-line);font-size:13.5px;position:sticky;top:-4px;z-index:5}
+.qbar b{font-weight:700}
+#q::-webkit-search-cancel-button{cursor:pointer}
 /* added 20 Nov: originals & links in the photo viewer, simplified Photos tab, partner items */
 .og{width:min(86vw,640px);font-size:13px;color:#ffffffdd;text-align:center;display:flex;flex-direction:column;gap:6px}
 .og .ogl{word-break:break-all}
@@ -1016,7 +1022,7 @@ details.sec.flat>summary{display:none}
 <header>
   <h1>Travel<b>Dragon</b><span class="h1x">Trips</span></h1>
   <span id="stats"></span>
-  <input id="q" type="text" placeholder="Find a place, country, type, year or tag" aria-label="Search">
+  <input id="q" type="search" placeholder="Find a place, country, type, year or tag" aria-label="Search">
   <button class="phoneonly ico" data-act="search" aria-label="Search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg></button>
   <button class="phoneonly ico" data-act="here" aria-label="Add the place where I am" title="Add the place where I am"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><path d="M12 7.5v5M9.5 10h5"/></svg></button>
   <button class="deskonly" data-act="addplace">Add place</button>
@@ -1274,11 +1280,14 @@ map.on('click',e=>{
   if(!ui.mode&&ui.placeId&&S.places.get(ui.placeId)){const p=S.places.get(ui.placeId),{lat,lng}=e.latlng;ACT._click={lat,lng};
     L.popup({maxWidth:300}).setLatLng(e.latlng).setContent(`<div class="pop"><b>Update location?</b><div style="margin:4px 0 8px">Move “${esc(p.name)}” to this spot.</div><div class="row wrap"><button class="primary sm" data-act="movehere">Yes, move the pin here</button><button class="sm" data-act="nopop">No</button></div><div id="nearPop" style="margin-top:8px"><span class="mono">Looking for named places here…</span></div></div>`).openOn(map);
     nearby(lat,lng).then(list=>{ACT._nearC=list.filter(n=>n.d<150);const b=$('#nearPop');if(b)b.innerHTML=ACT._nearC.length?'<div style="font-size:13px;margin-bottom:4px">Or use a named place at this spot:</div>'+nearHtml(ACT._nearC,'c'):''}).catch(()=>{const b=$('#nearPop');if(b)b.innerHTML=''});return}
-  if(!ui.mode)return;const {lat,lng}=e.latlng;const md=ui.mode;setMode(null);
+  if(!ui.mode){if(!TOUCH)addHerePop(e.latlng);return}const {lat,lng}=e.latlng;const md=ui.mode;setMode(null);
   if(md.kind==='move'){const p=S.places.get(md.id);if(p){p.lat=lat;p.lng=lng;save('places',p);drawPins();toast('Pin moved')}}
   else if(md.kind==='new'){const p=newPlace(lat,lng,{});openPlace(p.id);queueGeocode(p.id)}
   else if(md.kind==='photos'){let p=nearestPlace(lat,lng,150)||newPlace(lat,lng,{});for(const id of ui.sel){const ph=S.photos.get(id);if(ph){ph.placeId=p.id;ph.lat=lat;ph.lng=lng;ph.byTime=false;save('photos',ph)}}ui.sel.clear();openPlace(p.id);queueGeocode(p.id)}
 });
+function addHerePop(ll){ACT._addAt={lat:ll.lat,lng:ll.lng};const m=ui.mapId?S.maps.get(ui.mapId):mapNear(ll.lat,ll.lng);
+  L.popup({maxWidth:260}).setLatLng(ll).setContent(`<div class="pop"><b>Add a place here?</b><div style="margin:4px 0 8px;font-size:13px">${m?'It goes on your '+esc(m.name)+' map.':'You can put it on a map afterwards.'}</div><div class="row wrap"><button class="primary sm" data-act="addherego">Add a place here</button><button class="sm" data-act="nopop">Cancel</button></div></div>`).openOn(map)}
+map.on('contextmenu',e=>{if(ui.mode)return;if(ui.placeId&&S.places.get(ui.placeId))return;addHerePop(e.latlng)});
 function setMode(m,text){ui.mode=m;$('#hint').style.display=m?'block':'none';$('#hint').textContent=text||'';$('#map').style.cursor=m?'crosshair':''}
 
 /* ---------- places ---------- */
@@ -1547,7 +1556,9 @@ function vPlaces(){const save_=ui.mapId;ui.mapId=null;let ps=visiblePlaces();ui.
   return `${pm.length?`<h3 style="margin-top:0">Partners matching “${esc(ui.q)}”</h3>${pm.map(pa=>partnerCard(pa)).join('')}<h3>Places</h3>`:''}<div class="chips hs"><span class="chip${!tf?' on':''}" data-act="type" data-id="">All</span>${Object.entries(TYPES).map(([k,v])=>`<span class="chip${tf===k?' on':''}" data-act="type" data-id="${k}">${v[0]}</span>`).join('')}</div>
   <div class="chips hs">${Object.entries(VERD).map(([k,v])=>`<span class="chip${vf===k?' on':''}" data-act="vf" data-id="${k}">${v[0]}</span>`).join('')}<span class="chip${vf==='none'?' on':''}" data-act="vf" data-id="none">Not rated yet</span>${vf==='plan'||[...S.places.values()].some(isPlan)?`<span class="chip${vf==='plan'?' on':''}" data-act="vf" data-id="plan">Planned</span>`:''}<span class="chip${ui.minStars?' on':''}" data-act="min4">★ 4 and up</span></div>
   <div class="row" style="margin-bottom:6px"><span class="mono grow" style="color:var(--mute)">${ps.length} of ${S.places.size} places${any||ui.q?' · the map shows the same':''}</span>${any?'<button class="sm ghost" data-act="clearpf">Clear</button>':''}${gKey()&&ps.some(p=>!p.gid&&!isPlan(p)&&!p.gnone)?`<button class="sm" data-act="gmatchall" title="Ask Google for name, type, website and phone">Google details</button>`:''}${ps.length?`<button class="sm" data-act="sheet" title="Saves the places listed here as a spreadsheet for Excel">Spreadsheet</button>`:''}</div>
-  ${rows||`<div class="empty">${ui.q||any?'Nothing matches'+(ui.q?' “'+esc(ui.q)+'”':'')+'.':'No places yet.'}</div>`}`}
+  ${rows||`<div class="empty">${ui.q||any?'None of your places match'+(ui.q?' “'+esc(ui.q)+'”':'')+'.':'No places yet.'}${ui.q?`<div style="margin-top:12px"><button class="primary" data-act="qlook">Find “${esc(ui.q)}” on ${gCanAsk()?'Google':'the map'}</button></div><div style="font-size:13px;margin-top:10px">Or ${TOUCH?'press and hold':'click'} the spot on the map to add a place there.</div>`:''}</div>`}
+  ${rows&&ui.q?`<div class="qmore">Not one of these? <button class="sm" data-act="qlook">Find “${esc(ui.q)}” on ${gCanAsk()?'Google':'the map'}</button></div>`:''}
+  <div id="qres" aria-live="polite"></div>`}
 
 function photoScope(){const pm=ui.photoMap,pp=ui.photoPlace;if(pp&&!S.places.has(pp))ui.photoPlace=null;if(pm&&pm!=='none'&&!S.maps.has(pm))ui.photoMap=null;return {pm:ui.photoMap,pp:ui.photoPlace}}
 function inScope(ph){const {pm,pp}=photoScope();if(pp)return ph.placeId===pp;if(!pm)return true;const pl=ph.placeId&&S.places.get(ph.placeId);if(pm==='none')return !pl||!(pl.maps||[]).length;return !!pl&&(pl.maps||[]).includes(pm)}
@@ -1674,6 +1685,7 @@ function render(fit){
   const p=!pa&&ui.placeId&&S.places.get(ui.placeId);if(ui.placeId&&!S.places.get(ui.placeId))ui.placeId=null;
   const panel=$('#panel');const top=panel.scrollTop;
   panel.innerHTML=pa?vPartner(pa):p?vPlace(p):({maps:vMaps,places:vPlaces,photos:vPhotos,posts:vPosts,partners:vPartners}[ui.tab])();
+  if(ui.q)panel.insertAdjacentHTML('afterbegin',`<div class="qbar" role="status"><span class="grow">Showing only matches for “<b>${esc(ui.q)}</b>”</span><button class="sm" data-act="qclear">Clear search</button></div>`);
   const rk=pa?'pa'+pa.id:(ui.placeId||ui.tab+ui.mapId+ui.postId);panel.scrollTop=render.last===rk?top:0;render.last=rk;
   hydrate(panel);drawPins(fit);if(p){loadNear(p);mountG(p)}
   $('#stats').textContent=`${S.places.size} places · ${S.photos.size} photos · ${S.maps.size} maps`+(S.partners.size?` · ${S.partners.size} partners`:'')+(DB.ok?'':' · NOT SAVING (private window?)');
@@ -1687,11 +1699,13 @@ const ACT={
   startimport:runImport,
   addplace(){modal(`<h2>Add a place</h2><p style="color:var(--mute);margin:4px 0 10px">Search for a hotel, restaurant, trailhead or town, or click the spot on the map. Have a whole itinerary? <a href="#" data-act="itin">Add its places from the document</a>.</p><div class="row"><input id="ps" type="text" placeholder="e.g. Rifugio Lagazuoi"><button class="primary" data-act="searchplace">Search</button></div><div id="psr" style="margin-top:10px"></div><div class="row" style="margin-top:14px;justify-content:space-between"><button data-act="clickplace">${TAP} on the map instead</button><button data-act="closemodal">Cancel</button></div>`);$('#ps').focus();$('#ps').onkeydown=e=>{if(e.key==='Enter')ACT.searchplace()}},
   async searchplace(){const q=$('#ps').value.trim();if(!q)return;$('#psr').innerHTML='<span class="mono">Searching…</span>';
+    if(gCanAsk()){const list=ACT._ql=await lookAnywhere(q,map.getCenter());if(list.length&&list[0].src==='Google'){$('#psr').innerHTML=list.map((x,i)=>`<div class="card" data-act="psadd" data-id="${i}"><div class="grow"><div class="t">${esc(x.name)}</div><div class="s">${esc(x.addr)}</div></div></div>`).join('');return}}
     try{const c=map.getCenter();const r=await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lang=en&lat=${c.lat}&lon=${c.lng}`);const j=await r.json();ACT._res=j.features||[];
       $('#psr').innerHTML=ACT._res.map((f,i)=>{const pr=f.properties;return `<div class="card" data-act="pickresult" data-id="${i}"><div class="grow"><div class="t">${esc(pr.name||pr.street||q)}</div><div class="s">${esc([pr.osm_value,pr.city||pr.county,pr.state,pr.country].filter(Boolean).join(' · '))}</div></div></div>`}).join('')||'No matches. Try adding the town or country.'}
     catch(e){$('#psr').textContent='Search needs an internet connection. You can still click on the map.'}},
   pickresult(id){const f=ACT._res[+id];if(!f)return;const [lng,lat]=f.geometry.coordinates;const ex=nearestPlace(lat,lng,40);closeModal();if(ex){toast('You already have this place — opened it');openPlace(ex.id);return}
     const p=newPlace(lat,lng,{});applyGeo(p,f.properties,'search');if(!f.properties.name)p.name=$('#ps')?.value||p.name;p.auto=false;save('places',p);openPlace(p.id)},
+  async psadd(i){const x=(ACT._ql||[])[+i];if(!x)return;closeModal();await addFound(x,'')},
   clickplace(){closeModal();if(PHONE()&&ui.size==='list')setSize('split');setMode({kind:'new'},TAP+' the map where the place is')},
   backup(){modal(`<h2>Backup</h2><p style="color:var(--mute)">Everything lives in this browser on this computer. Save a backup file now and then, and use it to move to another computer or browser.</p><div class="row wrap"><button class="primary" data-act="dobackup">Save backup file</button><button data-act="dorestore">Restore from backup…</button><button data-act="sheetall">Save all places as a spreadsheet</button><button data-act="kmlall">Send all places to Google Maps</button><button data-act="closemodal" style="margin-left:auto">Close</button></div>`)},
   dobackup(){closeModal();exportBackup()},
@@ -2121,12 +2135,25 @@ function gTopHtml(p){
   <div id="gtopres" aria-live="polite"></div></div>`}
 let gTmp=null;function gTmpOff(){try{if(gTmp)gTmp.remove()}catch(e){}gTmp=null}
 function gTmpOn(lat,lng){gTmpOff();try{gTmp=L.circleMarker([lat,lng],{radius:14,color:'#F0B323',weight:4,fillColor:'#F0B323',fillOpacity:.25}).addTo(map);map.panTo([lat,lng]);setTimeout(()=>{if(gTmp)gTmpOff()},90000)}catch(e){}}
-document.addEventListener('keydown',e=>{const t=e.target;if(e.key==='Enter'&&t&&(t.id==='gq2'||t.id==='gq')){e.preventDefault();t.id==='gq2'?ACT.gtopsearch():ACT.gsearch()}});
+document.addEventListener('keydown',e=>{const t=e.target;if(e.key==='Escape'&&t&&t.id==='q'&&ui.q){e.preventDefault();ACT.qclear();return}if(e.key==='Enter'&&t&&(t.id==='gq2'||t.id==='gq')){e.preventDefault();t.id==='gq2'?ACT.gtopsearch():ACT.gsearch()}});
 async function gDetails(id){await gmLoad();const {Place}=await google.maps.importLibrary('places');const pl=new Place({id});await pl.fetchFields({fields:['displayName','location','formattedAddress','googleMapsURI','websiteURI','nationalPhoneNumber','internationalPhoneNumber','primaryType','types']});
   return {id,name:pl.displayName||'',lat:pl.location.lat(),lng:pl.location.lng(),addr:pl.formattedAddress||'',url:pl.googleMapsURI||'',web:pl.websiteURI||'',phone:pl.internationalPhoneNumber||pl.nationalPhoneNumber||'',types:[pl.primaryType,...(pl.types||[])].filter(Boolean)}}
 function gConfirmHtml(p,g,many){const t=gType(g.types);const facts=[t?TYPES[t][0]:'',fmtD(dist(p.lat,p.lng,g.lat,g.lng))+' from your pin'].filter(Boolean).join(' · ');
   return `<div class="gfound"><div class="gfh">Found it on Google. Is this the place?</div><div class="t">${esc(g.name)}</div><div class="s">${esc(g.addr)}</div><div class="s">${esc(facts)}${g.web?' · '+esc(g.web.replace(/^https?:\/\/(www\.)?/,'').replace(/\/.*$/,'')):''}${g.phone?' · '+esc(g.phone):''}</div><div class="s" style="color:var(--fir)">Shown with a gold ring on the map.</div>
   <div class="row wrap" style="margin-top:10px"><button class="primary sm" data-act="guse">Yes, use it</button><button class="sm" data-act="gtopno">No</button>${many?'<button class="sm ghost" data-act="gtopback">Other results</button>':''}</div></div>`}
+
+async function lookAnywhere(q,c){let list=[];
+  if(gCanAsk()){try{await gmLoad();const {Place}=await google.maps.importLibrary('places');const r=await Place.searchByText({textQuery:q,fields:['displayName','location','formattedAddress'],locationBias:gBox(c.lat,c.lng,200000),maxResultCount:8,language:'en'});
+    list=(r.places||[]).filter(x=>x.location).map(x=>({gid:x.id,name:x.displayName||'',addr:x.formattedAddress||'',lat:x.location.lat(),lng:x.location.lng(),src:'Google'}))}catch(e){}}
+  if(!list.length){try{const r=await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8&lang=en&lat=${c.lat}&lon=${c.lng}`);const j=await r.json();
+    list=(j.features||[]).map(f=>{const pr=f.properties||{},[lng,lat]=f.geometry.coordinates;return {name:pr.name||pr.street||q,addr:[pr.city||pr.county,pr.state,pr.country].filter(Boolean).join(', '),lat,lng,src:'map',props:pr}})}catch(e){}}
+  return list}
+async function addFound(x,typed){const ex=nearestPlace(x.lat,x.lng,40);if(ex){openPlace(ex.id);toast('You already have this place, so it’s open.',5000);return ex}
+  const m=ui.mapId?null:mapNear(x.lat,x.lng);const p=newPlace(x.lat,x.lng,{name:x.name||typed||'Unnamed place',auto:false,maps:ui.mapId?[ui.mapId]:(m?[m.id]:[])});
+  if(x.src==='map'&&x.props){applyGeo(p,x.props,'search');p.auto=false;save('places',p)}else refreshLocality(p);
+  ui.q='';const qi=$('#q');if(qi)qi.value='';
+  let linked=false;if(x.gid&&gCanAsk()){try{linked=await gUseId(p,{id:x.gid,name:x.name},false)}catch(e){}}
+  openPlace(p.id);if(linked){ui.gdone=p.id;render();gShowSaved()}else toast('Added “'+p.name+'”'+(m?' to your '+m.name+' map':'')+'.',5000);return p}
 function gBlock(p){if(location.protocol==='file:')return `<div class="tip" style="margin-top:6px">Google place picking works in the live app at <b>wholejourneys.github.io/traveldragontrips</b>. Your Google key only works there, so this copy opened from a file can’t use it.</div>`;return `<div class="row" style="margin-top:6px;gap:6px"><h3 class="grow" style="margin:0">Google map <small style="text-transform:none;letter-spacing:0;font-weight:400">· ${TAP.toLowerCase()} a place on it to use it</small></h3><span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
   ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google map here</button>`:`<div id="gbox" class="gframe" style="overflow:hidden"></div><div id="gask" style="margin-top:6px"></div>
   <div class="link" style="margin-top:6px"><input id="gq" type="text" placeholder="Search Google near this pin, e.g. the hotel name" enterkeyhint="search"><button class="sm" data-act="gsearch">Search</button></div><div id="gres" style="margin-top:4px"></div>
@@ -2220,6 +2247,14 @@ Object.assign(ACT,{
   gspotyes(){const p=S.places.get(ui.placeId),c=ACT._gspot;if(!p||!c)return;gApply(p,c.lat,c.lng);save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is under “Find or fix the place”.',5000)},
   gno(){const a=$('#gask');if(a)a.innerHTML='';gTmpOff()},
   gdoneok(){ui.gdone=null;render()},
+  qclear(){ui.q='';const qi=$('#q');if(qi)qi.value='';document.body.classList.remove('searching');render();setTimeout(()=>map.invalidateSize(),80)},
+  async qlook(){const q=(ui.q||'').trim(),o=$('#qres');if(!q||!o)return;o.innerHTML='<div class="gmsg">Looking for “'+esc(q)+'”…</div>';try{o.scrollIntoView({block:'nearest'})}catch(e){}
+    const list=ACT._ql=await lookAnywhere(q,map.getCenter());const o2=$('#qres');if(!o2)return;
+    if(!list.length){o2.innerHTML=`<div class="gmsg">Nothing found for “${esc(q)}”. Try fewer words, e.g. just the name and the country. Or ${TOUCH?'press and hold':'click'} the spot on the map.</div>`;return}
+    o2.innerHTML=`<div class="gfh" style="margin-top:12px">Found on ${list[0].src==='Google'?'Google':'the map'}</div>`+list.map((x,i)=>{const near=mapNear(x.lat,x.lng);return `<div class="qrow"><div class="grow"><div class="t">${esc(x.name)}</div><div class="s">${esc(x.addr)}${near?' · near your '+esc(near.name)+' map':''}</div></div><button class="sm" data-act="qgo" data-id="${i}">Show</button><button class="sm primary" data-act="qadd" data-id="${i}">Add</button></div>`}).join('')},
+  qgo(i){const x=(ACT._ql||[])[+i];if(!x)return;if(PHONE()&&ui.size==='list')setSize('split');map.setView([x.lat,x.lng],Math.max(map.getZoom(),13));gTmpOn(x.lat,x.lng)},
+  async qadd(i){const x=(ACT._ql||[])[+i];if(!x)return;gTmpOff();if(PHONE()&&ui.size==='list')setSize('split');await addFound(x,ui.q)},
+  async addherego(){const c=ACT._addAt;map.closePopup();if(!c)return;const m=ui.mapId?null:mapNear(c.lat,c.lng);const p=newPlace(c.lat,c.lng,{maps:ui.mapId?[ui.mapId]:(m?[m.id]:[])});openPlace(p.id);queueGeocode(p.id);toast('Pin added'+(m?' to your '+m.name+' map':'')+'. It’s being named from the map; use “Find this place on Google” to get its details.',7000)},
   ptab(k){ui.ptab=k;render();const pn=$('#panel'),t=document.querySelector('.ptabs');if(pn&&t&&t.offsetTop<pn.scrollTop)pn.scrollTop=t.offsetTop-8},
   async gtopsearch(){const p=S.places.get(ui.placeId),q=(($('#gq2')||{}).value||'').trim(),out=$('#gtopres');if(!p||!out)return;if(!q){out.innerHTML='<div class="gmsg">Type the name first, e.g. Radisson Cartagena.</div>';return}
     gTmpOff();out.innerHTML='<div class="gmsg">Searching Google…</div>';
