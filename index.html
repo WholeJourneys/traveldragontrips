@@ -965,6 +965,20 @@ aside,header{min-width:0}
 .rvplace b{display:block;font-size:15px;font-weight:700}.rvplace small{display:block;color:#ffffffaa;font-size:12.5px;margin-top:1px}
 .rvplace .rvgo{flex:none;font-weight:700;font-size:13px;color:var(--marigold)}
 .rvplace.none{display:block;color:#ffffffaa;font-size:13px}
+.gfind{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--canvas)}
+.gfind label.f{margin-top:0}
+.gmsg{font-size:13.5px;color:var(--mute);margin-top:8px;line-height:1.45}.gmsg.err{color:var(--rust)}
+.gfh{font-weight:700;font-size:14px;color:var(--fir);margin-bottom:6px}
+.gfound{margin-top:10px;padding:12px;border-radius:12px;background:var(--surface);border:2px solid var(--marigold)}
+.gfound .t{font-weight:700;font-size:16px}.gfound .s{font-size:13px;color:var(--mute);margin-top:2px;line-height:1.4}
+.gfind .nearb{background:var(--surface)}
+.gsaved{margin-top:12px;padding:12px 14px;border-radius:var(--r-card);background:#E3F1E6;border:1px solid #9CC7A6;color:var(--ink)}
+.gsaved .gsh{display:flex;align-items:center;gap:8px;font-size:15px}.gsaved .gsb{font-size:13.5px;margin-top:4px;line-height:1.45;color:#2B4A36}
+.gtick{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#2E7D4F;color:#fff;font-size:13px;font-weight:800;flex:none}
+.gtick.sm{width:18px;height:18px;font-size:11px}
+.glinked{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:13px;color:#2B4A36}.glinked a{font-weight:600;white-space:nowrap}
+@keyframes gflash{0%{box-shadow:0 0 0 0 #2E7D4F66}100%{box-shadow:0 0 0 12px #2E7D4F00}}
+.gsaved.flash{animation:gflash .9s ease-out 2}
 /* added 20 Nov: originals & links in the photo viewer, simplified Photos tab, partner items */
 .og{width:min(86vw,640px);font-size:13px;color:#ffffffdd;text-align:center;display:flex;flex-direction:column;gap:6px}
 .og .ogl{word-break:break-all}
@@ -1263,7 +1277,7 @@ function setMode(m,text){ui.mode=m;$('#hint').style.display=m?'block':'none';$('
 function newPlace(lat,lng,o){const p=Object.assign({id:uid(),name:'Unnamed place',auto:true,type:'other',lat,lng,locality:'',country:'',notesPublic:'',notesPrivate:'',links:[],tags:[],maps:ui.mapId?[ui.mapId]:[],created:Date.now()},o);save('places',p);return p}
 function mapNear(lat,lng,radius=60000){let best=null,bd=radius;for(const p of S.places.values()){if(!(p.maps||[]).length)continue;const d=dist(lat,lng,p.lat,p.lng);if(d<bd){for(const id of p.maps){if(S.maps.get(id)){bd=d;best=S.maps.get(id);break}}}}return best}
 function nearestPlace(lat,lng,radius){let best=null,bd=radius;for(const p of S.places.values()){const d=dist(lat,lng,p.lat,p.lng);if(d<=bd){bd=d;best=p}}return best}
-function openPlace(id,pan=true){ui.partnerId=null;ui.pfrom=null;if(ui.placeId!==id){ui.split=false;ui.psel=new Set();ui.gshow=false}ui.placeId=id;ui.postId=null;render();const p=S.places.get(id);if(p)queueGNear(id);if(p&&pan)map.setView([p.lat,p.lng],Math.max(map.getZoom(),14))}
+function openPlace(id,pan=true){if(ui.placeId!==id){ui.gdone=null;gTmpOff()}ui.partnerId=null;ui.pfrom=null;if(ui.placeId!==id){ui.split=false;ui.psel=new Set();ui.gshow=false}ui.placeId=id;ui.postId=null;render();const p=S.places.get(id);if(p)queueGNear(id);if(p&&pan)map.setView([p.lat,p.lng],Math.max(map.getZoom(),14))}
 function deletePlace(id){for(const ph of photosOf(id)){ph.placeId=null;save('photos',ph)}for(const m of S.maps.values()){if((m.order||[]).includes(id)){m.order=m.order.filter(x=>x!==id);save('maps',m)}}remove('places',id)}
 function mergePlace(fromId,toId){const a=S.places.get(fromId),b=S.places.get(toId);if(!a||!b)return;
   for(const ph of photosOf(fromId)){ph.placeId=toId;save('photos',ph)}
@@ -1312,8 +1326,8 @@ async function runGeo(){if(geoBusy)return;geoBusy=true;let changed=false;
 function softRender(){const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&a.id!=='q'){drawPins();return}render()}
 
 /* ---------- location history (undo) and what's nearby ---------- */
-function snap(p){const h={at:Date.now()};for(const k of ['lat','lng','name','type','locality','region','state','country','gmaps','rough','auto'])h[k]=p[k];h.info=p.info?Object.assign({},p.info):undefined;p.hist=[...(p.hist||[]),h].slice(-10)}
-function undoLoc(p){const h=(p.hist||[]).pop();if(!h)return false;for(const k of ['lat','lng','name','type','locality','region','state','country','gmaps','rough','auto','info'])p[k]=h[k];save('places',p);return true}
+function snap(p){const h={at:Date.now()};for(const k of ['lat','lng','name','type','locality','region','state','country','gmaps','rough','auto','gid','gauto','nameSrc'])h[k]=p[k];h.info=p.info?Object.assign({},p.info):undefined;p.hist=[...(p.hist||[]),h].slice(-10)}
+function undoLoc(p){const h=(p.hist||[]).pop();if(!h)return false;for(const k of ['lat','lng','name','type','locality','region','state','country','gmaps','rough','auto','info','gid','gauto','nameSrc'])if(h[k]===undefined)delete p[k];else p[k]=h[k];save('places',p);return true}
 const KIND={hotel:'hotel',guest_house:'guest house',hostel:'hostel',alpine_hut:'mountain hut',restaurant:'restaurant',cafe:'café',pub:'pub',bar:'bar',viewpoint:'viewpoint',attraction:'attraction',museum:'museum',parking:'car park',beach:'beach',peak:'summit',place_of_worship:'church',information:'information point',picnic_site:'picnic spot',bus_station:'bus station',station:'station',ferry_terminal:'ferry',castle:'castle',ruins:'ruins',archaeological_site:'archaeological site',gift:'shop'};
 const nearCache=new Map();
 async function nearby(lat,lng){const k=lat.toFixed(4)+','+lng.toFixed(4);if(nearCache.has(k))return nearCache.get(k);
@@ -1330,6 +1344,7 @@ function isRough(p){return !!p.auto||p.rough===true||(p.rough===undefined&&p.typ
 function nameLine(p){const n=p.name,l=p.locality||'';if(!l)return n;const a=n.toLowerCase(),b=l.toLowerCase(),c=b.split(/ de | del | d'/)[0];return a.includes(b)||(c.length>3&&a.includes(c))?n:n+', '+l}
 function areaTags(ps){const u=k=>[...new Set(ps.map(p=>p[k]).filter(Boolean))];const reg=u('region').filter(r=>!/^(distretto|district|county|bezirk|landkreis|provincia|province|comarca|arrondissement|city and county)\b/i.test(r)&&!/ (county|district)$/i.test(r)),st=u('state');const out=reg.slice(0,2);if(st.length===1&&!out.includes(st[0]))out.push(st[0]);return out.length?out:u('country').slice(0,2)}
 function gQuery(p,pin){return pin||isRough(p)?p.lat.toFixed(6)+','+p.lng.toFixed(6):nameLine(p)+(p.region?', '+p.region:'')}
+function gShowSaved(){const pn=$('#panel');if(pn)pn.scrollTop=0;const b=document.querySelector('.gsaved');if(b){b.classList.remove('flash');void b.offsetWidth;b.classList.add('flash')}}
 function gBox(lat,lng,r){const dy=r/111320,dx=r/(111320*Math.max(.2,Math.cos(lat*Math.PI/180)));return {north:Math.min(85,lat+dy),south:Math.max(-85,lat-dy),east:Math.min(180,lng+dx),west:Math.max(-180,lng-dx)}}
 function gUrl(p){return p.gmaps||'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(gQuery(p))}
 function gEmbed(p,pin,sat){pin=pin||isRough(p);return 'https://www.google.com/maps?q='+encodeURIComponent(gQuery(p,pin))+'&ll='+p.lat.toFixed(6)+','+p.lng.toFixed(6)+'&z='+(pin?18:16)+(sat?'&t=k':'')+'&hl=en&output=embed'}
@@ -1590,6 +1605,7 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   <input class="title" type="text" value="${esc(p.name)}" data-f="name" data-store="places" data-id="${p.id}" aria-label="Place name">
   <div class="mono" style="color:var(--mute);padding-left:4px">${esc(placeLine(p)||'Location name not set')}${dates?' · '+dates:''}</div>
   ${gNearHtml(p)}
+  ${gTopHtml(p)}
   <div class="row" style="margin-top:8px"><select data-f="type" data-store="places" data-id="${p.id}" data-redraw="1" aria-label="Type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}"${k===p.type?' selected':''}>${v[0]}</option>`).join('')}</select></div>
   ${isPlan(p)?`<div class="tip" style="margin:10px 0 0">Planned stop${p.planDay?' · '+esc(p.planDay):''}. Not visited yet: a photo, a note or a rating marks it visited.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="went">I went</button><button class="sm danger ghost" data-act="nogo" data-id="${p.id}">Didn’t go: remove</button></div></div>`:''}
   <div class="row wrap" style="margin-top:10px;gap:10px"><div class="stars" role="group" aria-label="My rating">${[1,2,3,4,5].map(n=>`<button class="${(p.stars||0)>=n?'on':''}" data-act="stars" data-id="${n}" aria-label="${n} star${n>1?'s':''}">★</button>`).join('')}</div><div class="chips" style="margin:0">${Object.entries(VERD).map(([k,v])=>`<span class="chip${p.verdict===k?' on':''}" data-act="verdict" data-id="${k}">${v[0]}</span>`).join('')}</div></div>
@@ -1804,7 +1820,7 @@ const ACT={
   yesnear(mode){const n=ACT._pick,p=S.places.get(ui.placeId);if(!n||!p)return;closeModal();moveTo(p,mode==='pin'?{lat:n.lat,lng:n.lng}:n)},
   movehere(){const p=S.places.get(ui.placeId),c=ACT._click;if(p&&c)moveTo(p,c)},
   nopop(){map.closePopup()},
-  undoloc(){const p=S.places.get(ui.placeId);if(p&&undoLoc(p)){render();map.panTo([p.lat,p.lng]);toast('Back to '+p.name)}},
+  undoloc(){const p=S.places.get(ui.placeId);ui.gdone=null;if(p&&undoLoc(p)){render();map.panTo([p.lat,p.lng]);toast('Back to '+p.name)}},
   gv(id){ui.gv=id;render()},
   gsat(){ui.gsat=!ui.gsat;render()},
   gpreview(id){const p=S.places.get(id);if(!p)return;const inf=p.info||{};modal(`<h2>${esc(p.name)}</h2><div class="mono" style="color:var(--mute)">${esc([(TYPES[p.type]||TYPES.other)[0],p.locality,p.region].filter(Boolean).join(' · '))}</div><iframe class="gframe" style="height:300px" title="Google Maps view" src="${esc(gEmbed(p,false,false))}"></iframe>${inf.website?`<p><a target="_blank" rel="noopener" href="${esc(inf.website)}">${esc(inf.website)}</a>${inf.phone?' · '+esc(inf.phone):''}</p>`:''}<p>${p.notesPublic?esc(p.notesPublic):'<span style="color:var(--rust)">No public description yet.</span>'}</p><div class="row" style="justify-content:flex-end"><a class="btn" target="_blank" rel="noopener" href="${esc(gUrl(p))}">Open in Google Maps ↗</a><button data-act="editplace" data-id="${p.id}">Edit place</button><button data-act="closemodal">Close</button></div>`)},
@@ -2082,6 +2098,24 @@ const gFailHtml=()=>`<div style="padding:12px;font-size:14px"><b>Google did not 
 function gmLoad(){if(gmP)return gmP;gmP=new Promise((res,rej)=>{window.__gmReady=()=>res(window.google.maps);
   window.gm_authFailure=()=>{gFail='Check that the key is pasted in full, that Maps JavaScript API and Places API (New) are both switched on for it, and that this web address is on its allowed list.';const b=$('#gbox');if(b)b.innerHTML=gFailHtml()};
   const s=document.createElement('script');s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(gKey())+'&v=weekly&libraries=places&loading=async&language=en&callback=__gmReady';s.async=true;s.onerror=()=>{gmP=null;rej(new Error('offline'))};document.head.appendChild(s)});return gmP}
+
+function gTopHtml(p){
+  if(ui.gdone===p.id&&p.gid){const inf=p.info||{};const got=[(TYPES[p.type]||TYPES.other)[0],inf.website&&'website',inf.phone&&'phone','Google Maps link'].filter(Boolean);
+    return `<div class="gsaved" role="status"><div class="gsh"><span class="gtick" aria-hidden="true">✓</span><b>Saved.</b> Linked to Google</div><div class="gsb">${esc(p.name)} now has its Google pin${got.length?', '+esc(got.join(', ')):''}.</div><div class="row wrap" style="margin-top:8px"><button class="sm" data-act="gdoneok">OK</button><button class="sm ghost" data-act="undoloc">Undo</button></div></div>`}
+  if(p.gid){const inf=p.info||{};return `<div class="glinked"><span class="gtick sm" aria-hidden="true">✓</span><span class="grow">Linked to Google</span>${inf.website?`<a href="${esc(inf.website)}" target="_blank" rel="noopener">Website ↗</a>`:''}${p.gmaps?`<a href="${esc(p.gmaps)}" target="_blank" rel="noopener">Google Maps ↗</a>`:''}</div>`}
+  if(!gKey()||location.protocol==='file:')return '';
+  const cands=!!(p.gcand&&p.gcand.length);
+  return `<div class="gfind" id="gfind"><label class="f" for="gq2">${cands?'Not in that list? Find it on Google':'Find this place on Google'} <small>— fills in name, pin, website and phone</small></label>
+  <div class="link" style="margin:0"><input id="gq2" type="text" value="${isRough(p)?'':esc(p.name)}" placeholder="Hotel, restaurant or sight name" enterkeyhint="search"><button class="sm dark" data-act="gtopsearch">Search</button></div>
+  <div id="gtopres" aria-live="polite"></div></div>`}
+let gTmp=null;function gTmpOff(){try{if(gTmp)gTmp.remove()}catch(e){}gTmp=null}
+function gTmpOn(lat,lng){gTmpOff();try{gTmp=L.circleMarker([lat,lng],{radius:14,color:'#F0B323',weight:4,fillColor:'#F0B323',fillOpacity:.25}).addTo(map);map.panTo([lat,lng]);setTimeout(()=>{if(gTmp)gTmpOff()},90000)}catch(e){}}
+document.addEventListener('keydown',e=>{const t=e.target;if(e.key==='Enter'&&t&&(t.id==='gq2'||t.id==='gq')){e.preventDefault();t.id==='gq2'?ACT.gtopsearch():ACT.gsearch()}});
+async function gDetails(id){await gmLoad();const {Place}=await google.maps.importLibrary('places');const pl=new Place({id});await pl.fetchFields({fields:['displayName','location','formattedAddress','googleMapsURI','websiteURI','nationalPhoneNumber','internationalPhoneNumber','primaryType','types']});
+  return {id,name:pl.displayName||'',lat:pl.location.lat(),lng:pl.location.lng(),addr:pl.formattedAddress||'',url:pl.googleMapsURI||'',web:pl.websiteURI||'',phone:pl.internationalPhoneNumber||pl.nationalPhoneNumber||'',types:[pl.primaryType,...(pl.types||[])].filter(Boolean)}}
+function gConfirmHtml(p,g,many){const t=gType(g.types);const facts=[t?TYPES[t][0]:'',fmtD(dist(p.lat,p.lng,g.lat,g.lng))+' from your pin'].filter(Boolean).join(' · ');
+  return `<div class="gfound"><div class="gfh">Found it on Google. Is this the place?</div><div class="t">${esc(g.name)}</div><div class="s">${esc(g.addr)}</div><div class="s">${esc(facts)}${g.web?' · '+esc(g.web.replace(/^https?:\/\/(www\.)?/,'').replace(/\/.*$/,'')):''}${g.phone?' · '+esc(g.phone):''}</div><div class="s" style="color:var(--fir)">Shown with a gold ring on the map.</div>
+  <div class="row wrap" style="margin-top:10px"><button class="primary sm" data-act="guse">Yes, use it</button><button class="sm" data-act="gtopno">No</button>${many?'<button class="sm ghost" data-act="gtopback">Other results</button>':''}</div></div>`}
 function gBlock(p){if(location.protocol==='file:')return `<div class="tip" style="margin-top:6px">Google place picking works in the live app at <b>wholejourneys.github.io/traveldragontrips</b>. Your Google key only works there, so this copy opened from a file can’t use it.</div>`;return `<div class="row" style="margin-top:6px;gap:6px"><h3 class="grow" style="margin:0">Google map <small style="text-transform:none;letter-spacing:0;font-weight:400">· ${TAP.toLowerCase()} a place on it to use it</small></h3><span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
   ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google map here</button>`:`<div id="gbox" class="gframe" style="overflow:hidden"></div><div id="gask" style="margin-top:6px"></div>
   <div class="link" style="margin-top:6px"><input id="gq" type="text" placeholder="Search Google near this pin, e.g. the hotel name" enterkeyhint="search"><button class="sm" data-act="gsearch">Search</button></div><div id="gres" style="margin-top:4px"></div>
@@ -2150,7 +2184,7 @@ Object.assign(ACT,{
     modal(`<h2>Get Google details for ${n} place${n>1?'s':''}</h2><p>For each place without a Google listing, the app asks Google what is listed at its pin.</p><ul style="padding-left:20px;line-height:1.55;margin:6px 0 12px"><li>If Google’s listing has the same name, the place gets Google’s name, type, website, phone and link.</li><li>If not, opening the place shows “Is it one of these?” so you can choose.</li><li>Your notes, photos and ratings are never changed, and each change can be undone.</li></ul><p style="color:var(--mute)">Keep the app open while it works, about ${Math.max(1,Math.ceil(n*0.7/60))} min.</p><div class="row" style="justify-content:flex-end"><button data-act="closemodal">Cancel</button><button class="primary" data-act="gmatchgo">Check ${n} place${n>1?'s':''}</button></div>`)},
   gmatchgo(){closeModal();let n=0;for(const p of S.places.values()){if(p.gid||isPlan(p)||p.gnone)continue;if(!isRough(p)&&!p.nameSrc)p.nameSrc='map';delete p.gnear;if(!gnQ.includes(p.id))gnQ.push(p.id);n++}
     ACT._gm={n,before:[...S.places.values()].filter(p=>p.gid).length};toast('Checking '+n+' place'+(n>1?'s':'')+' with Google…',6000);runGNear()},
-  async gcand(i){const p=S.places.get(ui.placeId),c=p&&(p.gcand||[])[+i];if(!c)return;toast('Asking Google for the details…');try{if(!gCanAsk())throw new Error('Google is not available right now');await gmLoad();if(await gUseId(p,c,false)){render();const q=S.places.get(p.id);map.panTo([q.lat,q.lng]);toast('Now “'+q.name+'”'+(q.info&&(q.info.website||q.info.phone)?', with contact details from Google.':'. Google has no website or phone for it.')+' Undo is in the place panel.',7000)}}catch(e){toast('Google could not give the details. '+(e&&e.message||''),6000)}},
+  async gcand(i){const p=S.places.get(ui.placeId),c=p&&(p.gcand||[])[+i];if(!c)return;toast('Asking Google for the details…');try{if(!gCanAsk())throw new Error('Google is not available right now');await gmLoad();if(await gUseId(p,c,false)){ui.gdone=p.id;render();gShowSaved();const q=S.places.get(p.id);map.panTo([q.lat,q.lng]);}}catch(e){toast('Google could not give the details. '+(e&&e.message||''),6000)}},
   gcandno(){const p=S.places.get(ui.placeId);if(!p)return;p.gcand=[];p.gnone=1;p.gnear=p.gnear||Date.now();save('places',p);render()},
   gcandagain(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gnear;delete p.gnone;p.gcand=[];save('places',p);render();queueGNear(p.id)},
   gautook(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gauto;save('places',p);render()},
@@ -2170,14 +2204,28 @@ async function gFillAll(manual){if(gFillAll.busy)return;const todo=gNeeds().slic
   catch(e){}finally{gFillAll.busy=false}
   if(n){render();toast('Website and phone filled in from Google for '+n+' place'+(n>1?'s':'')+'.',7000)}else if(manual)toast(bad?'Google did not answer. Try again in a minute.':'Google has no website or phone for those places.',6000)}
 Object.assign(ACT,{
-  guse(){const p=S.places.get(ui.placeId),g=ACT._g;if(!p||!g)return;gApply(p,g.lat,g.lng);if(g.name)p.name=g.name;if(g.url)p.gmaps=g.url;p.gid=g.id;p.auto=false;p.rough=false;delete p.nameSrc;const t=gType(g.types);if(t&&(!p.type||p.type==='other'))p.type=t;const c=p.info||{};if(g.web||g.phone)p.info={website:g.web||c.website||'',phone:g.phone||c.phone||'',email:c.email||'',src:'Google'};save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Now “'+p.name+'”. Undo is under “Find or fix the place”.',6000)},
+  guse(){const p=S.places.get(ui.placeId),g=ACT._g;if(!p||!g)return;gApply(p,g.lat,g.lng);if(g.name)p.name=g.name;if(g.url)p.gmaps=g.url;p.gid=g.id;p.auto=false;p.rough=false;delete p.nameSrc;const t=gType(g.types);if(t)p.type=t;const c=p.info||{};if(g.web||g.phone)p.info={website:g.web||c.website||'',phone:g.phone||c.phone||'',email:c.email||'',src:'Google'};save('places',p);refreshLocality(p);gTmpOff();ui.gdone=p.id;render();map.panTo([p.lat,p.lng]);gShowSaved()},
   gpinonly(){const p=S.places.get(ui.placeId),g=ACT._g;if(!p||!g)return;gApply(p,g.lat,g.lng);p.rough=false;save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is under “Find or fix the place”.',5000)},
   gspotyes(){const p=S.places.get(ui.placeId),c=ACT._gspot;if(!p||!c)return;gApply(p,c.lat,c.lng);save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is under “Find or fix the place”.',5000)},
-  gno(){const a=$('#gask');if(a)a.innerHTML=''},
+  gno(){const a=$('#gask');if(a)a.innerHTML='';gTmpOff()},
+  gdoneok(){ui.gdone=null;render()},
+  async gtopsearch(){const p=S.places.get(ui.placeId),q=(($('#gq2')||{}).value||'').trim(),out=$('#gtopres');if(!p||!out)return;if(!q){out.innerHTML='<div class="gmsg">Type the name first, e.g. Radisson Cartagena.</div>';return}
+    gTmpOff();out.innerHTML='<div class="gmsg">Searching Google…</div>';
+    try{await gmLoad();const {Place}=await google.maps.importLibrary('places');const r=await Place.searchByText({textQuery:q,fields:['displayName','location','formattedAddress'],locationBias:gBox(p.lat,p.lng,20000),maxResultCount:6,language:'en'});
+      const list=ACT._gs=(r.places||[]).map(x=>({id:x.id,name:x.displayName||'',addr:x.formattedAddress||'',lat:x.location.lat(),lng:x.location.lng()}));const o=$('#gtopres');if(!o)return;
+      if(!list.length){o.innerHTML=`<div class="gmsg">Google has no place called “${esc(q)}” near this pin. Check the spelling, or add the town, e.g. “${esc(q)} Cartagena”.</div>`;return}
+      if(list.length===1){await ACT.gtopask(0);return}
+      o.innerHTML=`<div class="gfh" style="margin-top:10px">Google found ${list.length}. Which one is it?</div>`+list.map((x,i)=>`<button class="sm nearb" data-act="gtopask" data-id="${i}"><b>${esc(x.name)}</b> <span>${esc(x.addr.split(',').slice(0,2).join(','))} · ${fmtD(dist(p.lat,p.lng,x.lat,x.lng))}</span></button>`).join('')}
+    catch(e){const o=$('#gtopres');if(o)o.innerHTML=`<div class="gmsg err">The search did not work: ${esc(e&&e.message||'no answer from Google')}. Check the internet connection and try again.</div>`}},
+  async gtopask(i){const p=S.places.get(ui.placeId),x=(ACT._gs||[])[+i],o=$('#gtopres');if(!p||!x||!o)return;o.innerHTML='<div class="gmsg">Getting the details from Google…</div>';
+    try{const g=ACT._g=await gDetails(x.id);const o2=$('#gtopres');if(!o2)return;o2.innerHTML=gConfirmHtml(p,g,(ACT._gs||[]).length>1);gTmpOn(g.lat,g.lng)}
+    catch(e){const o2=$('#gtopres');if(o2)o2.innerHTML=`<div class="gmsg err">Google could not give the details: ${esc(e&&e.message||'')}</div>`}},
+  gtopno(){gTmpOff();const o=$('#gtopres');if(o)o.innerHTML=(ACT._gs||[]).length>1?'<div class="gmsg">OK. Pick another result, or search a different name.</div>'+(ACT._gs||[]).map((x,i)=>`<button class="sm nearb" data-act="gtopask" data-id="${i}"><b>${esc(x.name)}</b> <span>${esc(x.addr.split(',').slice(0,2).join(','))}</span></button>`).join(''):'<div class="gmsg">OK, nothing changed. Try a different name, or add the town.</div>'},
+  gtopback(){ACT.gtopno()},
   async gsearch(){const p=S.places.get(ui.placeId),q=($('#gq')||{}).value;const out=$('#gres');if(!p||!out||!q||!q.trim())return;out.innerHTML='<span class="mono" style="color:var(--mute)">Searching Google…</span>';
     try{await gmLoad();const {Place}=await google.maps.importLibrary('places');const r=await Place.searchByText({textQuery:q.trim(),fields:['displayName','location','formattedAddress'],locationBias:gBox(p.lat,p.lng,20000),maxResultCount:6,language:'en'});
       const list=ACT._gs=(r.places||[]).map(x=>({id:x.id,name:x.displayName||'',addr:x.formattedAddress||'',lat:x.location.lat(),lng:x.location.lng()}));const o=$('#gres');if(!o)return;
-      o.innerHTML=list.length?list.map((x,i)=>`<button class="sm nearb" data-act="gres" data-id="${i}"><b>${esc(x.name)}</b> <span>${esc(x.addr.split(',').slice(0,2).join(','))} · ${fmtD(dist(p.lat,p.lng,x.lat,x.lng))}</span></button>`).join(''):'<span class="mono" style="color:var(--mute)">Google found nothing by that name near here.</span>'}
+      o.innerHTML=list.length?list.map((x,i)=>`<button class="sm nearb" data-act="gres" data-id="${i}"><b>${esc(x.name)}</b> <span>${esc(x.addr.split(',').slice(0,2).join(','))} · ${fmtD(dist(p.lat,p.lng,x.lat,x.lng))}</span></button>`).join(''):'<span class="mono" style="color:var(--mute)">Google found nothing by that name near here.</span>';try{o.scrollIntoView({block:'nearest',behavior:'smooth'})}catch(e){}}
     catch(e){const o=$('#gres');if(o)o.innerHTML=`<span style="color:var(--rust);font-size:13px">The search did not work. ${esc(e&&e.message||'')}</span>`}},
   gres(i){const x=(ACT._gs||[])[+i];if(!x)return;if(gMap){gMap.panTo({lat:x.lat,lng:x.lng});gMap.setZoom(18)}gPick(x.id)},
   gsetup(){modal(`<h2>Pick places from Google, inside the app</h2><p style="margin:4px 0 0">With a Google Maps key the small map in each place becomes a live Google map. ${TAP} a hotel, restaurant or sight on it, or search by name, and the place takes Google’s name, exact pin, website and phone, with one-tap undo. No more opening Google Maps to copy things across.</p>
@@ -2205,6 +2253,7 @@ function pHay(pa){const L=pLinks(pa.id);return [pa.name,pa.contact,...(pa.people
 function pBits(pa){return (PAGAIN[pa.again]?`<span class="vd" style="--c:${PAGAIN[pa.again][1]}">${PAGAIN[pa.again][0]}</span> `:'')+(pa.stars?`<span style="color:#c98a00">${'★'.repeat(pa.stars)}</span> · `:'')}
 function partnerCard(pa,role){const L=pLinks(pa.id);return `<div class="card" data-act="partner" data-id="${pa.id}"><div class="dot" style="--c:#6b3f7c">${esc((pa.name||'?').trim()[0]||'?').toUpperCase()}</div><div class="grow"><div class="t">${esc(pa.name||'Unnamed partner')}</div><div class="s">${pBits(pa)}${esc(role||PKIND[pa.kind]||'')}${pa.region?' · '+esc(pa.region):''}${role===undefined&&L.maps.length?' · '+L.maps.map(x=>esc(x.m.name)).join(', '):''}</div>${(pa.people||[]).some(x=>x.name)?`<div class="s" style="margin-top:2px">${(pa.people||[]).filter(x=>x.name).slice(0,3).map(x=>esc(x.name)+(x.role?' ('+esc(x.role)+')':'')).join(' · ')}</div>`:''}${(pa.clients||[]).length?`<div class="s" style="margin-top:2px">${(pa.clients||[]).slice(0,5).map(esc).join(' · ')}${pa.clients.length>5?' +'+(pa.clients.length-5):''}</div>`:''}</div></div>`}
 function pLinkBlock(scope,o){const links=(o.partners||[]).filter(l=>S.partners.has(l.pid));const avail=[...S.partners.values()].filter(pa=>!links.some(l=>l.pid===pa.id)).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!links.length)return `<label class="f">${scope==='map'?'Guides & partners on this trip':'Guide or partner for this stop'} <small>— private</small></label><select class="pLinkSel" data-scope="${scope}" data-id="${o.id}" aria-label="Add a guide or partner"><option value="">+ Add a guide, DMC or tour operator…</option>${avail.map(pa=>`<option value="${pa.id}">${esc(pa.name)}${pa.region?' · '+esc(pa.region):''}</option>`).join('')}<option value="__new">New partner…</option></select>`;
   return `<div class="psec"><h3>${scope==='map'?'Guides & partners on this trip':'Guide or partner for this stop'} <small style="text-transform:none;letter-spacing:0;font-weight:400">— private</small></h3>
   ${links.map((l,i)=>{const pa=S.partners.get(l.pid);return `<div class="plink">${partnerCard(pa,l.role||'')}<div class="row" style="gap:6px;margin:-4px 0 10px"><input type="text" list="pRoles" value="${esc(l.role||'')}" data-plrole="${i}" data-scope="${scope}" data-id="${o.id}" placeholder="Role, e.g. ground handler, Medellín guide" aria-label="Role" style="flex:1"><button class="sm danger ghost" data-act="punlink" data-scope="${scope}" data-id="${o.id}" data-i="${i}" title="Remove from ${scope==='map'?'this trip':'this stop'} (the partner stays in your list)">Remove</button></div></div>`}).join('')}
   <select class="pLinkSel" data-scope="${scope}" data-id="${o.id}" aria-label="Add a guide or partner"><option value="">+ Add a guide, DMC or tour operator…</option>${avail.map(pa=>`<option value="${pa.id}">${esc(pa.name)}${pa.region?' · '+esc(pa.region):''}</option>`).join('')}<option value="__new">New partner…</option></select></div>`}
