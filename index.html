@@ -979,6 +979,14 @@ aside,header{min-width:0}
 .glinked{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:13px;color:#2B4A36}.glinked a{font-weight:600;white-space:nowrap}
 @keyframes gflash{0%{box-shadow:0 0 0 0 #2E7D4F66}100%{box-shadow:0 0 0 12px #2E7D4F00}}
 .gsaved.flash{animation:gflash .9s ease-out 2}
+.ptabs{display:flex;gap:2px;margin:14px -16px 4px;padding:0 12px;border-bottom:1px solid var(--line);position:sticky;top:-4px;background:var(--surface);z-index:4;overflow-x:auto;scrollbar-width:none}
+.ptabs::-webkit-scrollbar{display:none}
+.ptabs button{border:0;border-radius:0;background:transparent;padding:10px 10px 9px;font-size:14px;font-weight:600;color:var(--mute);border-bottom:3px solid transparent;flex:none;min-height:0}
+.ptabs button:hover{background:transparent;color:var(--ink);border-color:transparent;border-bottom-color:var(--line-strong)}
+.ptabs button.on{color:var(--fir);border-bottom-color:var(--marigold)}
+details.sec.flat{border-top:0;margin-top:6px;padding-top:0}
+details.sec.flat>summary{display:none}
+@media(max-width:820px){.ptabs{top:-4px;margin:12px -16px 4px;padding:0 8px}.ptabs button{padding:11px 9px 10px;font-size:14px}}
 /* added 20 Nov: originals & links in the photo viewer, simplified Photos tab, partner items */
 .og{width:min(86vw,640px);font-size:13px;color:#ffffffdd;text-align:center;display:flex;flex-direction:column;gap:6px}
 .og .ogl{word-break:break-all}
@@ -1277,7 +1285,7 @@ function setMode(m,text){ui.mode=m;$('#hint').style.display=m?'block':'none';$('
 function newPlace(lat,lng,o){const p=Object.assign({id:uid(),name:'Unnamed place',auto:true,type:'other',lat,lng,locality:'',country:'',notesPublic:'',notesPrivate:'',links:[],tags:[],maps:ui.mapId?[ui.mapId]:[],created:Date.now()},o);save('places',p);return p}
 function mapNear(lat,lng,radius=60000){let best=null,bd=radius;for(const p of S.places.values()){if(!(p.maps||[]).length)continue;const d=dist(lat,lng,p.lat,p.lng);if(d<bd){for(const id of p.maps){if(S.maps.get(id)){bd=d;best=S.maps.get(id);break}}}}return best}
 function nearestPlace(lat,lng,radius){let best=null,bd=radius;for(const p of S.places.values()){const d=dist(lat,lng,p.lat,p.lng);if(d<=bd){bd=d;best=p}}return best}
-function openPlace(id,pan=true){if(ui.placeId!==id){ui.gdone=null;gTmpOff()}ui.partnerId=null;ui.pfrom=null;if(ui.placeId!==id){ui.split=false;ui.psel=new Set();ui.gshow=false}ui.placeId=id;ui.postId=null;render();const p=S.places.get(id);if(p)queueGNear(id);if(p&&pan)map.setView([p.lat,p.lng],Math.max(map.getZoom(),14))}
+function openPlace(id,pan=true){if(ui.placeId!==id){ui.gdone=null;gTmpOff();ui.ptab='ov'}ui.partnerId=null;ui.pfrom=null;if(ui.placeId!==id){ui.split=false;ui.psel=new Set();ui.gshow=false}ui.placeId=id;ui.postId=null;render();const p=S.places.get(id);if(p)queueGNear(id);if(p&&pan)map.setView([p.lat,p.lng],Math.max(map.getZoom(),14))}
 function deletePlace(id){for(const ph of photosOf(id)){ph.placeId=null;save('photos',ph)}for(const m of S.maps.values()){if((m.order||[]).includes(id)){m.order=m.order.filter(x=>x!==id);save('maps',m)}}remove('places',id)}
 function mergePlace(fromId,toId){const a=S.places.get(fromId),b=S.places.get(toId);if(!a||!b)return;
   for(const ph of photosOf(fromId)){ph.placeId=toId;save('photos',ph)}
@@ -1600,27 +1608,36 @@ function vPosts(){
 function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].filter(o=>o.id!==p.id).map(o=>[dist(p.lat,p.lng,o.lat,o.lng),o]).sort((a,b)=>a[0]-b[0]).slice(0,12);
   const g=esc(gUrl(p));const gpin=isRough(p)||ui.gv==='pin';const inf=p.info||{};const psel=ui.psel||(ui.psel=new Set());const web=`https://www.google.com/search?q=${encodeURIComponent([p.name,p.locality,p.country].filter(Boolean).join(' '))}`;
   const dates=phs.length?(fmtDate(phs[0].date)+(phs.length>1&&fmtDate(phs[phs.length-1].date)!==fmtDate(phs[0].date)?' – '+fmtDate(phs[phs.length-1].date):'')):'';
-  const dop=k=>ui.dopen&&k in ui.dopen?ui.dopen[k]:(k==='fix'&&isRough(p));
+  const tab=ui.ptab||'ov';const dop=k=>(k==='fix'&&tab==='loc')||(k==='contact'&&tab==='ov')||(k==='more'&&tab==='more')||(ui.dopen&&k in ui.dopen?ui.dopen[k]:false);
   return `<button class="ghost back" data-act="closeplace">← Back</button>
   <input class="title" type="text" value="${esc(p.name)}" data-f="name" data-store="places" data-id="${p.id}" aria-label="Place name">
   <div class="mono" style="color:var(--mute);padding-left:4px">${esc(placeLine(p)||'Location name not set')}${dates?' · '+dates:''}</div>
   ${gNearHtml(p)}
   ${gTopHtml(p)}
-  <div class="row" style="margin-top:8px"><select data-f="type" data-store="places" data-id="${p.id}" data-redraw="1" aria-label="Type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}"${k===p.type?' selected':''}>${v[0]}</option>`).join('')}</select></div>
+  <div class="ptabs" role="tablist">${[['ov','Overview'],['ph','Photos'+(phs.length?' '+phs.length:'')],['notes','Notes'],['loc','Location'],['more','More']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" class="${tab===k?'on':''}" data-act="ptab" data-id="${k}">${l}</button>`).join('')}</div>
+  ${({ov:()=>`  <div class="row" style="margin-top:8px"><select data-f="type" data-store="places" data-id="${p.id}" data-redraw="1" aria-label="Type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}"${k===p.type?' selected':''}>${v[0]}</option>`).join('')}</select></div>
   ${isPlan(p)?`<div class="tip" style="margin:10px 0 0">Planned stop${p.planDay?' · '+esc(p.planDay):''}. Not visited yet: a photo, a note or a rating marks it visited.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="went">I went</button><button class="sm danger ghost" data-act="nogo" data-id="${p.id}">Didn’t go: remove</button></div></div>`:''}
   <div class="row wrap" style="margin-top:10px;gap:10px"><div class="stars" role="group" aria-label="My rating">${[1,2,3,4,5].map(n=>`<button class="${(p.stars||0)>=n?'on':''}" data-act="stars" data-id="${n}" aria-label="${n} star${n>1?'s':''}">★</button>`).join('')}</div><div class="chips" style="margin:0">${Object.entries(VERD).map(([k,v])=>`<span class="chip${p.verdict===k?' on':''}" data-act="verdict" data-id="${k}">${v[0]}</span>`).join('')}</div></div>
   <input type="text" value="${esc(p.bestFor||'')}" data-f="bestFor" data-store="places" data-id="${p.id}" placeholder="Best for… e.g. active couples, women’s groups, a rest day" style="margin-top:8px" aria-label="Best for">
-  <div class="row wrap" style="margin-top:8px">${pickBtn('here','+ Add photos to this place')}</div>
+  ${phs.length?`<div class="row" style="margin-top:16px"><h3 class="grow" style="margin:0">Photos</h3><button class="sm ghost" data-act="ptab" data-id="ph">See all ${phs.length}</button></div><div class="strip" style="margin-top:6px">${phs.slice(0,8).map(ph=>`<div class="ph" data-act="zoom" data-id="${ph.id}">${ph.thumb?`<img data-th="${ph.id}" alt="">`:''}${ph.kind==='video'?'<span class="v">video</span>':''}${ph.star?'<span class="st">★</span>':''}</div>`).join('')}</div>`:`<div class="row" style="margin-top:14px">${pickBtn('here','+ Add photos to this place')}</div>`}
+  ${pLinkBlock('place',p)}
+  <details class="sec flat" data-d="contact" ${dop('contact')?'open':''}><summary>Contact${p.contact?' · '+esc(p.contact):''}</summary>${dop('contact')?`
+  ${inf.src?`<div class="mono" style="color:var(--mute)">Filled from ${esc(inf.src)}, check before relying on it.</div>`:''}
+  <input type="text" value="${esc(p.contact||'')}" placeholder="Contact person, e.g. Giulia, sales manager" data-f="contact" data-store="places" data-id="${p.id}" style="margin-bottom:6px" aria-label="Contact person">
+  <div class="link"><input type="url" value="${esc(inf.website||'')}" placeholder="Website" data-f="info.website" data-store="places" data-id="${p.id}">${inf.website?`<a class="btn sm" target="_blank" rel="noopener" href="${esc(inf.website)}">↗</a>`:''}</div>
+  <div class="row"><input type="text" value="${esc(inf.phone||'')}" placeholder="Phone" data-f="info.phone" data-store="places" data-id="${p.id}"><input type="text" value="${esc(inf.email||'')}" placeholder="Email" data-f="info.email" data-store="places" data-id="${p.id}"></div>
+  <button class="sm" data-act="contact" style="margin-top:6px">Look for contact details</button>
+  `:''}</details>
+`,ph:()=>`  <div class="row wrap" style="margin-top:8px">${pickBtn('here','+ Add photos to this place')}</div>
   ${TOUCH?`<div class="mono" style="color:var(--mute);margin-top:4px">Take pictures with the Camera app first, then add them here from your library, so the originals stay in your photos.</div>`:''}
   ${phs.length?`<div class="row" style="margin-top:18px"><h3 class="grow" style="margin:0">${phs.length} photo${phs.length>1?'s':''}</h3>${phs.length>1&&!ui.split?`<button class="sm" data-act="bestplace">Pick best</button>`:''}${phs.length>12&&!ui.split?`<button class="sm" data-act="placephotos">See all ${phs.length}</button>`:''}${phs.length>1?`<button class="sm${ui.split?' dark':''}" data-act="splitmode">${ui.split?'Done':'Separate photos'}</button>`:''}</div>
   ${ui.split?`<div class="private" style="border:1px solid #e6cfae;border-radius:8px;padding:8px;margin:6px 0"><div style="font-size:13px;margin-bottom:6px">Tick the photos that belong somewhere else, then choose where they go.</div><div class="row wrap"><button class="sm primary" data-act="splitnew" ${psel.size?'':'disabled'}>Move ${psel.size||''} to a new place</button>${others.length?`<select id="moveSel" style="width:auto;max-width:170px" ${psel.size?'':'disabled'} aria-label="Move to existing place"><option value="">Move to…</option>${others.map(([d,o])=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>`:''}<button class="sm" data-act="spliteach">One place per photo</button></div></div>`:''}
   <div class="strip" style="margin-top:6px">${phs.slice(0,60).map(ph=>`<div class="ph${psel.has(ph.id)?' sel':''}" data-act="${ui.split?'psel':'zoom'}" data-id="${ph.id}">${ph.thumb?`<img data-th="${ph.id}" alt="">`:`<div class="mono" style="padding:4px;word-break:break-all">${esc(ph.name)}</div>`}${ph.kind==='video'?'<span class="v">video</span>':''}${ph.star&&!ui.split?'<span class="st">★</span>':''}${ui.split?`<span class="tick">${psel.has(ph.id)?'✓':''}</span>`:''}</div>`).join('')}</div>`:''}
-  <label class="f">Public description <small>— used in posts and share pages</small></label>
+`,notes:()=>`  <label class="f">Public description <small>— used in posts and share pages</small></label>
   <textarea data-f="notesPublic" data-store="places" data-id="${p.id}" placeholder="What a guest would love about this place">${esc(p.notesPublic)}</textarea>
   <label class="f">Private notes <small>— never leave this app</small></label>
   <textarea class="private" data-f="notesPrivate" data-store="places" data-id="${p.id}" placeholder="Contacts, rates, who to ask for, what to avoid, when you were last here">${esc(p.notesPrivate)}</textarea>
-  ${pLinkBlock('place',p)}
-  <details class="sec" data-d="fix" ${dop('fix')?'open':''}><summary>Find or fix the place</summary>${dop('fix')?`
+`,loc:()=>`  <details class="sec flat" data-d="fix" ${dop('fix')?'open':''}><summary>Find or fix the place</summary>${dop('fix')?`
   ${(p.hist||[]).length?`<button class="sm" data-act="undoloc" style="margin:4px 0 8px">↩ Undo last change (back to “${esc(p.hist[p.hist.length-1].name)}”, ${fmtDate(p.hist[p.hist.length-1].at)})</button>`:''}
   ${gKey()?gBlock(p):`<div class="row" style="margin-top:6px;gap:6px"><h3 class="grow" style="margin:0">Google view</h3>${isRough(p)?'':`<span class="chip${gpin?'':' on'}" data-act="gv" data-id="list">Listing</span><span class="chip${gpin?' on':''}" data-act="gv" data-id="pin">At the pin</span>`}<span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
   ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google view here</button>`:`<iframe class="gframe" loading="lazy" title="Google Maps view of this place" src="${esc(gEmbed(p,gpin,ui.gsat))}"></iframe>`}
@@ -1636,14 +1653,7 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   ${ui.near===p.id?`<div id="near"><span class="mono">Looking…</span></div>`:`<button class="sm" data-act="shownear">Show named places nearby</button>`}
   `:''}</details>
   `:''}</details>
-  <details class="sec" data-d="contact" ${dop('contact')?'open':''}><summary>Contact${p.contact?' · '+esc(p.contact):''}</summary>${dop('contact')?`
-  ${inf.src?`<div class="mono" style="color:var(--mute)">Filled from ${esc(inf.src)}, check before relying on it.</div>`:''}
-  <input type="text" value="${esc(p.contact||'')}" placeholder="Contact person, e.g. Giulia, sales manager" data-f="contact" data-store="places" data-id="${p.id}" style="margin-bottom:6px" aria-label="Contact person">
-  <div class="link"><input type="url" value="${esc(inf.website||'')}" placeholder="Website" data-f="info.website" data-store="places" data-id="${p.id}">${inf.website?`<a class="btn sm" target="_blank" rel="noopener" href="${esc(inf.website)}">↗</a>`:''}</div>
-  <div class="row"><input type="text" value="${esc(inf.phone||'')}" placeholder="Phone" data-f="info.phone" data-store="places" data-id="${p.id}"><input type="text" value="${esc(inf.email||'')}" placeholder="Email" data-f="info.email" data-store="places" data-id="${p.id}"></div>
-  <button class="sm" data-act="contact" style="margin-top:6px">Look for contact details</button>
-  `:''}</details>
-  <details class="sec" data-d="more" ${dop('more')?'open':''}><summary>Links, tags, maps, draft a post, delete</summary>${dop('more')?`
+`,more:()=>`  <details class="sec flat" data-d="more" ${dop('more')?'open':''}><summary>Links, tags, maps, draft a post, delete</summary>${dop('more')?`
   <h3 style="margin-top:4px">Links</h3>
   ${(p.links||[]).map((l,i)=>`<div class="link"><input type="text" value="${esc(l.label)}" placeholder="Label" data-link="${i}" data-k="label" style="width:30%;min-width:84px"><input type="url" value="${esc(l.url)}" placeholder="https://" data-link="${i}" data-k="url"><label class="row" style="font-size:12px;gap:2px" title="Private links are left out of share pages"><input type="checkbox" data-link="${i}" data-k="priv" ${l.priv?'checked':''}>private</label>${l.url?`<a class="btn sm" target="_blank" rel="noopener" href="${esc(l.url)}">↗</a>`:''}<button class="ghost sm" data-act="dellink" data-id="${i}" aria-label="Remove link">✕</button></div>`).join('')}
   <button class="sm" data-act="addlink">+ Add link</button>
@@ -1655,7 +1665,8 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   <div class="row wrap"><button class="sm" data-act="postplace">Draft a post</button>
   ${others.length?`<select id="mergeSel" style="width:auto;max-width:190px" aria-label="Merge into"><option value="">Merge into…</option>${others.map(([d,o])=>`<option value="${o.id}">${esc(o.name)} (${d<1000?Math.round(d)+' m':(d/1000).toFixed(1)+' km'})</option>`).join('')}</select>`:''}
   <button class="sm danger ghost" data-act="delplace" style="margin-left:auto">Delete place</button></div>
-  `:''}</details>`}
+  `:''}</details>`})[tab]()}
+`}
 
 function render(fit){
   const pa=ui.partnerId&&S.partners.get(ui.partnerId);if(ui.partnerId&&!pa){ui.partnerId=null;ui.pfrom=null}
@@ -2175,7 +2186,7 @@ function gNearHtml(p){
   const named=!isRough(p);
   if(!p.gnear)return gnErr?`<div class="mono" style="color:var(--rust);margin-top:6px">Google could not check this pin: ${esc(gnErr)}</div>`:gCanAsk()?`<div class="mono" id="gnwait" style="color:var(--mute);margin-top:6px">Checking what Google lists at this pin…</div>`:'';
   const l=p.gcand||[];
-  if(!l.length)return p.gnone||named?'':`<div class="tip" style="margin:8px 0 0">Google lists no hotel, restaurant or other business within 120 m of this pin, so there is no contact info to pull. A private home or rental has no listing. Type its name at the top and add a link or phone under Contact, or search Google by name under Fix the location.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="gcandno">OK</button><button class="sm" data-act="gcandagain">Check again</button></div></div>`;
+  if(!l.length)return p.gnone||named?'':`<div class="tip" style="margin:8px 0 0">Google lists no hotel, restaurant or other business within 120 m of this pin, so there is no contact info to pull. A private home or rental has no listing. Type its name at the top and add a link or phone under Contact, or use “Find this place on Google” above.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="gcandno">OK</button><button class="sm" data-act="gcandagain">Check again</button></div></div>`;
   return `<div class="tip" style="margin:8px 0 0"><b>${named?'Is “'+esc(p.name)+'” one of these Google listings?':'Which one is this?'}</b> Tap it and the name, website, phone and Google link fill in.<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${l.map((c,i)=>`<button class="sm nearb" data-act="gcand" data-id="${i}"><b>${esc(c.name)}</b> <span>${esc(c.kind||'')}${c.kind?' · ':''}${fmtD(c.d)}</span></button>`).join('')}</div><div class="row wrap" style="margin-top:6px"><button class="sm ghost" data-act="gcandno">${named?'None: keep my name':'None of these'}</button></div></div>`}
 Object.assign(ACT,{
   gmatchall(){const n=[...S.places.values()].filter(p=>!p.gid&&!isPlan(p)&&!p.gnone).length;
@@ -2209,6 +2220,7 @@ Object.assign(ACT,{
   gspotyes(){const p=S.places.get(ui.placeId),c=ACT._gspot;if(!p||!c)return;gApply(p,c.lat,c.lng);save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is under “Find or fix the place”.',5000)},
   gno(){const a=$('#gask');if(a)a.innerHTML='';gTmpOff()},
   gdoneok(){ui.gdone=null;render()},
+  ptab(k){ui.ptab=k;render();const pn=$('#panel'),t=document.querySelector('.ptabs');if(pn&&t&&t.offsetTop<pn.scrollTop)pn.scrollTop=t.offsetTop-8},
   async gtopsearch(){const p=S.places.get(ui.placeId),q=(($('#gq2')||{}).value||'').trim(),out=$('#gtopres');if(!p||!out)return;if(!q){out.innerHTML='<div class="gmsg">Type the name first, e.g. Radisson Cartagena.</div>';return}
     gTmpOff();out.innerHTML='<div class="gmsg">Searching Google…</div>';
     try{await gmLoad();const {Place}=await google.maps.importLibrary('places');const r=await Place.searchByText({textQuery:q,fields:['displayName','location','formattedAddress'],locationBias:gBox(p.lat,p.lng,20000),maxResultCount:6,language:'en'});
