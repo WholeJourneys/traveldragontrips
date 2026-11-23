@@ -995,6 +995,7 @@ details.sec.flat>summary{display:none}
 #q::-webkit-search-cancel-button{cursor:pointer}
 .kindrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0 2px}
 .wj{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--note-line);font-size:14px;cursor:pointer}.wj input{margin-top:3px;flex:none}.wj small{display:block;color:var(--mute);font-size:12px}
+.areanote{font-size:13px;color:var(--mute);margin-top:8px;line-height:1.5}.areanote b{color:var(--ink)}.areanote a{font-weight:600;margin-left:6px;white-space:nowrap}
 .kindrow .kl{font-size:13px;color:var(--mute);margin-right:2px}
 /* added 20 Nov: originals & links in the photo viewer, simplified Photos tab, partner items */
 .og{width:min(86vw,640px);font-size:13px;color:#ffffffdd;text-align:center;display:flex;flex-direction:column;gap:6px}
@@ -1341,19 +1342,26 @@ function photoStay(p){const ps=photosOf(p.id).filter(x=>x.date&&typeof x.lat==='
   let mn=Infinity,mx=0,spread=0;for(const a of ps){mn=Math.min(mn,a.date);mx=Math.max(mx,a.date);spread=Math.max(spread,dist(a.lat,a.lng,p.lat,p.lng))}
   const span=(mx-mn)/60000;return {stay:spread<=80&&((ps.length>=3&&span>=15)||(ps.length>=2&&span>=25)),spread,n:ps.length}}
 const isBizPr=pr=>{const t=guessType(pr);return t==='eat'||t==='stay'||['shop','amenity','office','craft','healthcare'].includes(pr.osm_key)&&t!=='move'&&t!=='view'&&t!=='exp'};
-function areaName(pr){const loc=pr.city||pr.town||pr.village||pr.locality||pr.county||'';const a=pr.district||pr.suburb||(pr.locality&&pr.locality!==loc?pr.locality:'')||pr.street||'';return [a,loc].filter(Boolean).filter((x,i,arr)=>arr.indexOf(x)===i).join(', ')}
-function applyGeo(p,pr,force){if(!force&&p.auto&&pr.name&&isBizPr(pr)&&!photoStay(p).stay){const nm=areaName(pr);applyGeo(p,Object.assign({},pr,{name:'',osm_key:'',osm_value:''}),false);if(nm){p.name=nm;p.rough=false;delete p.nameSrc}p.area=1;if(p.type==='other')p.type='walk';return}const loc=pr.city||pr.town||pr.village||pr.locality||pr.district||pr.county||'';if(!p.locality||force)p.locality=loc||p.locality;if(!p.country||force)p.country=pr.country||p.country;p.region=pr.county||p.region||'';p.state=pr.state||p.state||'';
+function areaInfo(pr){const loc=pr.city||pr.town||pr.village||pr.locality||pr.county||'';let a='',kind='';
+  if(pr.district&&pr.district!==loc){a=pr.district;kind='neighbourhood'}else if(pr.suburb&&pr.suburb!==loc){a=pr.suburb;kind='neighbourhood'}else if(pr.locality&&pr.locality!==loc){a=pr.locality;kind='area'}else if(pr.street){a=pr.street;kind='street'}else{a=loc;kind=pr.city?'city':'town'}
+  return {name:[a,a===loc?'':loc].filter(Boolean).join(', '),part:a,kind,town:loc,country:pr.country||''}}
+function areaName(pr){return areaInfo(pr).name}
+function setArea(p,pr){const ai=areaInfo(pr);if(ai.name)p.name=ai.name;p.areaOf={part:ai.part,kind:ai.kind,town:ai.town,country:ai.country}}
+function areaNote(p){const a=p.areaOf;if(!a||!p.area||(p.type!=='walk'&&p.type!=='view'))return '';const what={neighbourhood:'a neighbourhood',area:'an area',street:'a street',city:'the city',town:'the town'}[a.kind]||'an area';
+  const q=encodeURIComponent([a.part,a.town,a.country].filter(Boolean).filter((x,i,arr)=>arr.indexOf(x)===i).join(' '));
+  return `<div class="areanote">Named after <b>${esc(a.part)}</b>, ${what}${a.town&&a.town!==a.part?' of '+esc(a.town):''} (from the open map, not a business). <span class="nowrap">What is it? <a href="https://en.wikipedia.org/wiki/Special:Search?search=${q}" target="_blank" rel="noopener">Wikipedia ↗</a> <a href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">Google Maps ↗</a></span></div>`}
+function applyGeo(p,pr,force){if(!force&&p.auto&&pr.name&&isBizPr(pr)&&!photoStay(p).stay){const near=typeof pr._lat==='number'?dist(p.lat,p.lng,pr._lat,pr._lng):null;applyGeo(p,Object.assign({},pr,{name:'',osm_key:'',osm_value:''}),false);setArea(p,pr);p.rough=false;delete p.nameSrc;p.area=1;if(p.type==='other')p.type='walk';if(near===null||near<=60)p.bizAsk={name:pr.name,type:guessType(pr)||'eat',kind:KIND[pr.osm_value]||'',lat:pr._lat,lng:pr._lng};return}const loc=pr.city||pr.town||pr.village||pr.locality||pr.district||pr.county||'';if(!p.locality||force)p.locality=loc||p.locality;if(!p.country||force)p.country=pr.country||p.country;p.region=pr.county||p.region||'';p.state=pr.state||p.state||'';
   const t=guessType(pr),poi=pr.name&&(t||pr.osm_key==='natural'||pr.osm_key==='leisure'||pr.osm_key==='place');
   if(p.auto||force){const nm=(poi||force==='search')&&pr.name?pr.name:[pr.street||pr.name,loc].filter(Boolean).join(', ');if(nm){p.name=nm;p.auto=false;p.rough=!((poi||force==='search')&&pr.name);if(!p.rough&&force!=='search'&&!p.gid)p.nameSrc='map';else delete p.nameSrc}if(t&&p.type==='other'&&(poi||force==='search'))p.type=t}}
-async function reverse(lat,lng){const r=await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=en`);const j=await r.json();return j.features&&j.features[0]&&j.features[0].properties}
+async function reverse(lat,lng){const r=await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=en`);const j=await r.json();const f=j.features&&j.features[0];if(!f)return null;const pr=Object.assign({},f.properties);const c=f.geometry&&f.geometry.coordinates;if(c&&c.length>1){pr._lat=c[1];pr._lng=c[0]}return pr}
 async function runGeo(){if(geoBusy)return;geoBusy=true;let changed=false;
   while(geoQ.length){const p=S.places.get(geoQ.shift());if(!p)continue;try{const pr=await reverse(p.lat,p.lng);if(pr){applyGeo(p,pr,false);save('places',p);changed=true;if(!p.rough)queueEnrich(p.id);queueGNear(p.id)}}catch(e){geoQ.length=0;break}await sleep(700);if(changed&&geoQ.length%5===0){softRender()}}
   geoBusy=false;if(changed)softRender()}
 function softRender(){const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&a.id!=='q'){drawPins();return}render()}
 
 /* ---------- location history (undo) and what's nearby ---------- */
-function snap(p){const h={at:Date.now()};for(const k of ['lat','lng','name','type','locality','region','state','country','gmaps','rough','auto','gid','gauto','nameSrc'])h[k]=p[k];h.info=p.info?Object.assign({},p.info):undefined;p.hist=[...(p.hist||[]),h].slice(-10)}
-function undoLoc(p){const h=(p.hist||[]).pop();if(!h)return false;for(const k of ['lat','lng','name','type','locality','region','state','country','gmaps','rough','auto','info','gid','gauto','nameSrc'])if(h[k]===undefined)delete p[k];else p[k]=h[k];save('places',p);return true}
+function snap(p){const h={at:Date.now()};for(const k of ['lat','lng','name','type','locality','region','state','country','gmaps','rough','auto','gid','gauto','nameSrc','area','bizAsk','areaOf'])h[k]=p[k];h.info=p.info?Object.assign({},p.info):undefined;p.hist=[...(p.hist||[]),h].slice(-10)}
+function undoLoc(p){const h=(p.hist||[]).pop();if(!h)return false;for(const k of ['lat','lng','name','type','locality','region','state','country','gmaps','rough','auto','info','gid','gauto','nameSrc','area','bizAsk','areaOf'])if(h[k]===undefined)delete p[k];else p[k]=h[k];save('places',p);return true}
 const KIND={hotel:'hotel',guest_house:'guest house',hostel:'hostel',alpine_hut:'mountain hut',restaurant:'restaurant',cafe:'café',pub:'pub',bar:'bar',viewpoint:'viewpoint',attraction:'attraction',museum:'museum',parking:'car park',beach:'beach',peak:'summit',place_of_worship:'church',information:'information point',picnic_site:'picnic spot',bus_station:'bus station',station:'station',ferry_terminal:'ferry',castle:'castle',ruins:'ruins',archaeological_site:'archaeological site',gift:'shop'};
 const nearCache=new Map();
 async function nearby(lat,lng){const k=lat.toFixed(4)+','+lng.toFixed(4);if(nearCache.has(k))return nearCache.get(k);
@@ -1633,6 +1641,8 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   <input class="title" type="text" value="${esc(p.name)}" data-f="name" data-store="places" data-id="${p.id}" aria-label="Place name">
   <div class="mono" style="color:var(--mute);padding-left:4px">${esc(placeLine(p)||'Location name not set')}${dates?' · '+dates:''}</div>
   ${gNearHtml(p)}
+  ${areaNote(p)}
+  ${bizAskHtml(p)}
   ${gTopHtml(p)}
   <div class="ptabs" role="tablist">${[['ov','Overview'],['ph','Photos'+(phs.length?' '+phs.length:'')],['notes','Notes'],['loc','Location'],['more','More']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" class="${tab===k?'on':''}" data-act="ptab" data-id="${k}">${l}</button>`).join('')}</div>
   ${({ov:()=>`<div class="kindrow" role="group" aria-label="What is this?"><span class="kl">This is</span>${[['place','A place I went into',!['walk','view'].includes(p.type)],['walk','A walk or area',p.type==='walk'],['view','A viewpoint',p.type==='view']].map(([k,l,on])=>`<button class="chip${on?' on':''}" data-act="kind" data-id="${k}" aria-pressed="${on}">${l}</button>`).join('')}</div>${p.type==='walk'?walkJoinHtml(p):''}  <div class="row" style="margin-top:8px"><select data-f="type" data-store="places" data-id="${p.id}" data-redraw="1" aria-label="Type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}"${k===p.type?' selected':''}>${v[0]}</option>`).join('')}</select></div>
@@ -2168,6 +2178,8 @@ function walkMates(p){const days=new Set(photosOf(p.id).filter(x=>x.date).map(x=
   return [...S.places.values()].filter(q=>q.id!==p.id&&!isPlan(q)&&dist(p.lat,p.lng,q.lat,q.lng)<=1500&&(!q.gid||q.gauto)&&photosOf(q.id).some(x=>x.date&&days.has(new Date(x.date).toDateString()))).sort((a,b)=>dist(p.lat,p.lng,a.lat,a.lng)-dist(p.lat,p.lng,b.lat,b.lng))}
 const walkish=q=>q.type==='walk'||q.type==='other'||q.area||isRough(q);
 function walkJoinHtml(p){const m=walkMates(p);if(!m.length)return '';return `<div class="tip wjoin" style="margin-top:10px"><b>Same day, within 1.5 km.</b> Tick the stops that were part of this walk; their photos join it and the route shows on the map.${m.slice(0,12).map(q=>`<label class="wj"><input type="checkbox" value="${q.id}" ${walkish(q)?'checked':''}><span class="grow">${esc(q.name)} <small>${esc((TYPES[q.type]||TYPES.other)[0])} · ${photosOf(q.id).length} photo${photosOf(q.id).length===1?'':'s'} · ${fmtD(dist(p.lat,p.lng,q.lat,q.lng))}</small></span></label>`).join('')}<div class="row wrap" style="margin-top:8px"><button class="sm dark" data-act="walkjoin">Join ticked stops</button><span style="font-size:12.5px;color:var(--mute)">To split them again: Photos › Separate photos.</span></div></div>`}
+
+function bizAskHtml(p){const b=p.bizAsk;if(!b||p.type!=='walk')return '';return `<div class="tip bizask" style="margin-top:10px"><b>Were you inside ${esc(b.name)}${b.kind?' ('+esc(b.kind)+')':''}, or just in the area?</b> It’s right by where ${photosOf(p.id).length>1?'these photos were':'this photo was'} taken.<div class="row wrap" style="margin-top:8px"><button class="sm dark" data-act="bizyes">I was inside ${esc(b.name)}</button><button class="sm" data-act="bizno">Just the area</button></div></div>`}
 function gBlock(p){if(location.protocol==='file:')return `<div class="tip" style="margin-top:6px">Google place picking works in the live app at <b>wholejourneys.github.io/traveldragontrips</b>. Your Google key only works there, so this copy opened from a file can’t use it.</div>`;return `<div class="row" style="margin-top:6px;gap:6px"><h3 class="grow" style="margin:0">Google map <small style="text-transform:none;letter-spacing:0;font-weight:400">· ${TAP.toLowerCase()} a place on it to use it</small></h3><span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
   ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google map here</button>`:`<div id="gbox" class="gframe" style="overflow:hidden"></div><div id="gask" style="margin-top:6px"></div>
   <div class="link" style="margin-top:6px"><input id="gq" type="text" placeholder="Search Google near this pin, e.g. the hotel name" enterkeyhint="search"><button class="sm" data-act="gsearch">Search</button></div><div id="gres" style="margin-top:4px"></div>
@@ -2261,12 +2273,15 @@ Object.assign(ACT,{
   gspotyes(){const p=S.places.get(ui.placeId),c=ACT._gspot;if(!p||!c)return;gApply(p,c.lat,c.lng);save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is under “Find or fix the place”.',5000)},
   gno(){const a=$('#gask');if(a)a.innerHTML='';gTmpOff()},
   gdoneok(){ui.gdone=null;render()},
-  async kind(k){const p=S.places.get(ui.placeId);if(!p)return;
+  bizyes(){const p=S.places.get(ui.placeId);const b=p&&p.bizAsk;if(!b)return;snap(p);p.name=b.name;p.type=b.type==='walk'||b.type==='view'?'eat':b.type;delete p.area;delete p.bizAsk;delete p.gnone;delete p.gnear;p.gcand=[];p.rough=false;p.auto=false;if(!p.gid)p.nameSrc='map';
+    if(typeof b.lat==='number'&&dist(p.lat,p.lng,b.lat,b.lng)>15){p.lat=b.lat;p.lng=b.lng}save('places',p);queueEnrich(p.id);queueGNear(p.id);render();drawPins();toast('Now “'+p.name+'”. Its Google details will fill in if Google lists it. Undo is under Location.',7000)},
+  bizno(){const p=S.places.get(ui.placeId);if(!p)return;delete p.bizAsk;save('places',p);render()},
+  async kind(k){const p=S.places.get(ui.placeId);if(!p)return;if(k==='place'&&p.bizAsk){ACT.bizyes();return}delete p.bizAsk;
     if(k==='place'){if(p.type==='walk'||p.type==='view'){snap(p);p.type='other';delete p.area;save('places',p)}ui.ptab='ov';render();const g=$('#gq2');if(g){g.focus();g.select();g.scrollIntoView({block:'center'})}else if(!p.gid)toast('Use “Find this place on Google” to get its name and details.',5000);return}
     snap(p);const wasBiz=p.gauto||p.nameSrc==='map'||['eat','stay'].includes(p.type)&&!p.gid;
     if(p.gauto||(p.gid&&wasBiz)){delete p.gid;delete p.gauto;delete p.gmaps;if(p.info){delete p.info.website;delete p.info.phone}}
     delete p.nameSrc;p.gcand=[];p.gnone=1;p.type=k==='walk'?'walk':'view';p.area=1;p.auto=false;p.rough=false;
-    if(wasBiz||isRough(p)){try{const pr=await reverse(p.lat,p.lng);const a=pr&&areaName(pr);if(a)p.name=k==='view'?'View, '+a:a}catch(e){}}
+    if(wasBiz||isRough(p)||!p.areaOf){try{const pr=await reverse(p.lat,p.lng);if(pr){const keep=p.name;setArea(p,pr);if(!(wasBiz||isRough(p)))p.name=keep;else if(k==='view')p.name='View, '+p.name}}catch(e){}}
     save('places',p);render();toast((k==='walk'?'Now a walk or area: “':'Now a viewpoint: “')+p.name+'”. Undo is under Location.',6000)},
   walkjoin(){const p=S.places.get(ui.placeId);if(!p)return;const ids=[...document.querySelectorAll('.wjoin input:checked')].map(x=>x.value);const m=walkMates(p).filter(q=>ids.includes(q.id));if(!m.length){toast('Tick the stops to join first.');return}snap(p);for(const q of m)mergePlace(q.id,p.id);
     const ps=photosOf(p.id).filter(x=>typeof x.lat==='number');if(ps.length){p.lat=ps.reduce((s,x)=>s+x.lat,0)/ps.length;p.lng=ps.reduce((s,x)=>s+x.lng,0)/ps.length}save('places',p);render();drawPins();toast(`Joined ${m.length} stop${m.length>1?'s':''}. The walk’s route shows on the map.`,6000)},
