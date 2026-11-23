@@ -993,6 +993,9 @@ details.sec.flat>summary{display:none}
 .qbar{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:8px 8px 8px 12px;border-radius:var(--r-ctl);background:var(--note);border:1px solid var(--note-line);font-size:13.5px;position:sticky;top:-4px;z-index:5}
 .qbar b{font-weight:700}
 #q::-webkit-search-cancel-button{cursor:pointer}
+.kindrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0 2px}
+.wj{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--note-line);font-size:14px;cursor:pointer}.wj input{margin-top:3px;flex:none}.wj small{display:block;color:var(--mute);font-size:12px}
+.kindrow .kl{font-size:13px;color:var(--mute);margin-right:2px}
 /* added 20 Nov: originals & links in the photo viewer, simplified Photos tab, partner items */
 .og{width:min(86vw,640px);font-size:13px;color:#ffffffdd;text-align:center;display:flex;flex-direction:column;gap:6px}
 .og .ogl{word-break:break-all}
@@ -1243,7 +1246,7 @@ const BASES={
 };
 let curBase='street';BASES.street.addTo(map);
 let tileOK=0,tileBad=0;for(const l of Object.values(BASES)){l.on('tileload',()=>{tileOK++;$('#warn').style.display='none'});l.on('tileerror',()=>{tileBad++;if(!tileOK&&tileBad>=4)$('#warn').style.display='block'})}
-const pins=L.layerGroup().addTo(map);let routeLine=null;const markerOf=new Map();
+const pins=L.layerGroup().addTo(map);const walkLines=L.layerGroup().addTo(map);let routeLine=null;const markerOf=new Map();
 function placeColor(p){return (TYPES[p.type]||TYPES.other)[1]}
 function visiblePlaces(){
   let list=[...S.places.values()];
@@ -1273,6 +1276,7 @@ function drawPins(fit){
     markerOf.set(p.id,mk);
   });
   const m=ui.mapId&&S.maps.get(ui.mapId);
+  walkLines.clearLayers();for(const p of list){if(p.type!=='walk')continue;const pts=photosOf(p.id).filter(x=>x.date&&typeof x.lat==='number').sort((a,b)=>a.date-b.date).map(x=>[x.lat,x.lng]);if(pts.length>1)L.polyline(pts,{color:'#4F7A3A',weight:p.id===ui.placeId?5:3,opacity:p.id===ui.placeId?.9:.6}).addTo(walkLines)}
   if(m&&m.route!==false&&list.length>1&&!ui.q)routeLine=L.polyline(list.map(p=>[p.lat,p.lng]),{color:'#1d3b2a',weight:3,opacity:.7,dashArray:'6 8'}).addTo(map);
   if(fit&&list.length){const b=L.latLngBounds(list.map(p=>[p.lat,p.lng]));map.fitBounds(b.pad(.25),{maxZoom:15})}
 }
@@ -1333,7 +1337,12 @@ function askKML(mapId){askKML.mapId=mapId||null;const m=mapId&&S.maps.get(mapId)
 const geoQ=[];let geoBusy=false;
 function queueGeocode(id){if(!settings.autoname)return;geoQ.push(id);runGeo()}
 function guessType(pr){const k=pr.osm_key,v=pr.osm_value;if(k==='tourism'&&/hotel|guest_house|hostel|alpine_hut|chalet|motel|apartment/.test(v))return 'stay';if(k==='amenity'&&/restaurant|cafe|pub|bar|fast_food|biergarten/.test(v))return 'eat';if(k==='tourism'&&v==='viewpoint')return 'view';if(k==='tourism'&&/attraction|museum|gallery|artwork/.test(v))return 'exp';if(k==='historic')return 'exp';if(k==='railway'||k==='aeroway'||(k==='amenity'&&/bus_station|ferry_terminal|parking/.test(v)))return 'move';if(k==='natural'&&/beach|peak|cape|bay/.test(v))return 'view';return null}
-function applyGeo(p,pr,force){const loc=pr.city||pr.town||pr.village||pr.locality||pr.district||pr.county||'';if(!p.locality||force)p.locality=loc||p.locality;if(!p.country||force)p.country=pr.country||p.country;p.region=pr.county||p.region||'';p.state=pr.state||p.state||'';
+function photoStay(p){const ps=photosOf(p.id).filter(x=>x.date&&typeof x.lat==='number');if(ps.length<2)return {stay:false,spread:0,n:ps.length};
+  let mn=Infinity,mx=0,spread=0;for(const a of ps){mn=Math.min(mn,a.date);mx=Math.max(mx,a.date);spread=Math.max(spread,dist(a.lat,a.lng,p.lat,p.lng))}
+  const span=(mx-mn)/60000;return {stay:spread<=80&&((ps.length>=3&&span>=15)||(ps.length>=2&&span>=25)),spread,n:ps.length}}
+const isBizPr=pr=>{const t=guessType(pr);return t==='eat'||t==='stay'||['shop','amenity','office','craft','healthcare'].includes(pr.osm_key)&&t!=='move'&&t!=='view'&&t!=='exp'};
+function areaName(pr){const loc=pr.city||pr.town||pr.village||pr.locality||pr.county||'';const a=pr.district||pr.suburb||(pr.locality&&pr.locality!==loc?pr.locality:'')||pr.street||'';return [a,loc].filter(Boolean).filter((x,i,arr)=>arr.indexOf(x)===i).join(', ')}
+function applyGeo(p,pr,force){if(!force&&p.auto&&pr.name&&isBizPr(pr)&&!photoStay(p).stay){const nm=areaName(pr);applyGeo(p,Object.assign({},pr,{name:'',osm_key:'',osm_value:''}),false);if(nm){p.name=nm;p.rough=false;delete p.nameSrc}p.area=1;if(p.type==='other')p.type='walk';return}const loc=pr.city||pr.town||pr.village||pr.locality||pr.district||pr.county||'';if(!p.locality||force)p.locality=loc||p.locality;if(!p.country||force)p.country=pr.country||p.country;p.region=pr.county||p.region||'';p.state=pr.state||p.state||'';
   const t=guessType(pr),poi=pr.name&&(t||pr.osm_key==='natural'||pr.osm_key==='leisure'||pr.osm_key==='place');
   if(p.auto||force){const nm=(poi||force==='search')&&pr.name?pr.name:[pr.street||pr.name,loc].filter(Boolean).join(', ');if(nm){p.name=nm;p.auto=false;p.rough=!((poi||force==='search')&&pr.name);if(!p.rough&&force!=='search'&&!p.gid)p.nameSrc='map';else delete p.nameSrc}if(t&&p.type==='other'&&(poi||force==='search'))p.type=t}}
 async function reverse(lat,lng){const r=await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=en`);const j=await r.json();return j.features&&j.features[0]&&j.features[0].properties}
@@ -1451,7 +1460,7 @@ function askImport(files){files=files.filter(isMedia);const empty=files.filter(f
   <select id="impMap"><option value="">No map — just add to my places</option><option value="__new"${cur?'':' selected'}>New map…</option>${[...S.maps.values()].map(m=>`<option value="${m.id}"${m.id===cur?' selected':''}>${esc(m.name)}</option>`).join('')}</select>
   <input id="impName" type="text" placeholder="New map name, e.g. Ticino research Sep 2026" style="margin-top:6px;${cur?'display:none':''}">
   <label class="f">Group photos into one pin when they are within</label>
-  <select id="impRad"><option value="80">80 m — every hotel, café and viewpoint separately</option><option value="250" selected>250 m — one pin per spot</option><option value="1000">1 km — one pin per village or walk section</option><option value="5000">5 km — one pin per town</option></select>
+  <select id="impRad"><option value="80">80 m — every hotel, café and viewpoint separately (site inspections)</option><option value="250" selected>250 m — one pin per spot</option><option value="1000">1 km — one pin per walk or neighbourhood</option><option value="5000">5 km — one pin per town</option></select>
   <label class="f" style="font-weight:400"><input type="checkbox" id="impAuto" ${settings.autoname?'checked':''}> Suggest place names automatically <small>(sends only the coordinates to an OpenStreetMap lookup)</small></label>
   <div class="row" style="margin-top:16px;justify-content:flex-end"><button data-act="closemodal">Cancel</button><button class="primary" data-act="startimport">Add to map</button></div>`);
   $('#impMap').onchange=e=>$('#impName').style.display=e.target.value==='__new'?'':'none';
@@ -1626,7 +1635,7 @@ function vPlace(p){const phs=photosOf(p.id);const others=[...S.places.values()].
   ${gNearHtml(p)}
   ${gTopHtml(p)}
   <div class="ptabs" role="tablist">${[['ov','Overview'],['ph','Photos'+(phs.length?' '+phs.length:'')],['notes','Notes'],['loc','Location'],['more','More']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" class="${tab===k?'on':''}" data-act="ptab" data-id="${k}">${l}</button>`).join('')}</div>
-  ${({ov:()=>`  <div class="row" style="margin-top:8px"><select data-f="type" data-store="places" data-id="${p.id}" data-redraw="1" aria-label="Type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}"${k===p.type?' selected':''}>${v[0]}</option>`).join('')}</select></div>
+  ${({ov:()=>`<div class="kindrow" role="group" aria-label="What is this?"><span class="kl">This is</span>${[['place','A place I went into',!['walk','view'].includes(p.type)],['walk','A walk or area',p.type==='walk'],['view','A viewpoint',p.type==='view']].map(([k,l,on])=>`<button class="chip${on?' on':''}" data-act="kind" data-id="${k}" aria-pressed="${on}">${l}</button>`).join('')}</div>${p.type==='walk'?walkJoinHtml(p):''}  <div class="row" style="margin-top:8px"><select data-f="type" data-store="places" data-id="${p.id}" data-redraw="1" aria-label="Type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}"${k===p.type?' selected':''}>${v[0]}</option>`).join('')}</select></div>
   ${isPlan(p)?`<div class="tip" style="margin:10px 0 0">Planned stop${p.planDay?' · '+esc(p.planDay):''}. Not visited yet: a photo, a note or a rating marks it visited.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="went">I went</button><button class="sm danger ghost" data-act="nogo" data-id="${p.id}">Didn’t go: remove</button></div></div>`:''}
   <div class="row wrap" style="margin-top:10px;gap:10px"><div class="stars" role="group" aria-label="My rating">${[1,2,3,4,5].map(n=>`<button class="${(p.stars||0)>=n?'on':''}" data-act="stars" data-id="${n}" aria-label="${n} star${n>1?'s':''}">★</button>`).join('')}</div><div class="chips" style="margin:0">${Object.entries(VERD).map(([k,v])=>`<span class="chip${p.verdict===k?' on':''}" data-act="verdict" data-id="${k}">${v[0]}</span>`).join('')}</div></div>
   <input type="text" value="${esc(p.bestFor||'')}" data-f="bestFor" data-store="places" data-id="${p.id}" placeholder="Best for… e.g. active couples, women’s groups, a rest day" style="margin-top:8px" aria-label="Best for">
@@ -2128,7 +2137,7 @@ function gTopHtml(p){
   if(ui.gdone===p.id&&p.gid){const inf=p.info||{};const got=[(TYPES[p.type]||TYPES.other)[0],inf.website&&'website',inf.phone&&'phone','Google Maps link'].filter(Boolean);
     return `<div class="gsaved" role="status"><div class="gsh"><span class="gtick" aria-hidden="true">✓</span><b>Saved.</b> Linked to Google</div><div class="gsb">${esc(p.name)} now has its Google pin${got.length?', '+esc(got.join(', ')):''}.</div><div class="row wrap" style="margin-top:8px"><button class="sm" data-act="gdoneok">OK</button><button class="sm ghost" data-act="undoloc">Undo</button></div></div>`}
   if(p.gid){const inf=p.info||{};return `<div class="glinked"><span class="gtick sm" aria-hidden="true">✓</span><span class="grow">Linked to Google</span>${inf.website?`<a href="${esc(inf.website)}" target="_blank" rel="noopener">Website ↗</a>`:''}${p.gmaps?`<a href="${esc(p.gmaps)}" target="_blank" rel="noopener">Google Maps ↗</a>`:''}</div>`}
-  if(!gKey()||location.protocol==='file:')return '';
+  if(!gKey()||location.protocol==='file:'||p.type==='walk'||p.type==='view')return '';
   const cands=!!(p.gcand&&p.gcand.length);
   return `<div class="gfind" id="gfind"><label class="f" for="gq2">${cands?'Not in that list? Find it on Google':'Find this place on Google'} <small>— fills in name, pin, website and phone</small></label>
   <div class="link" style="margin:0"><input id="gq2" type="text" value="${isRough(p)?'':esc(p.name)}" placeholder="Hotel, restaurant or sight name" enterkeyhint="search"><button class="sm dark" data-act="gtopsearch">Search</button></div>
@@ -2154,6 +2163,11 @@ async function addFound(x,typed){const ex=nearestPlace(x.lat,x.lng,40);if(ex){op
   ui.q='';const qi=$('#q');if(qi)qi.value='';
   let linked=false;if(x.gid&&gCanAsk()){try{linked=await gUseId(p,{id:x.gid,name:x.name},false)}catch(e){}}
   openPlace(p.id);if(linked){ui.gdone=p.id;render();gShowSaved()}else toast('Added “'+p.name+'”'+(m?' to your '+m.name+' map':'')+'.',5000);return p}
+
+function walkMates(p){const days=new Set(photosOf(p.id).filter(x=>x.date).map(x=>new Date(x.date).toDateString()));if(!days.size)return [];
+  return [...S.places.values()].filter(q=>q.id!==p.id&&!isPlan(q)&&dist(p.lat,p.lng,q.lat,q.lng)<=1500&&(!q.gid||q.gauto)&&photosOf(q.id).some(x=>x.date&&days.has(new Date(x.date).toDateString()))).sort((a,b)=>dist(p.lat,p.lng,a.lat,a.lng)-dist(p.lat,p.lng,b.lat,b.lng))}
+const walkish=q=>q.type==='walk'||q.type==='other'||q.area||isRough(q);
+function walkJoinHtml(p){const m=walkMates(p);if(!m.length)return '';return `<div class="tip wjoin" style="margin-top:10px"><b>Same day, within 1.5 km.</b> Tick the stops that were part of this walk; their photos join it and the route shows on the map.${m.slice(0,12).map(q=>`<label class="wj"><input type="checkbox" value="${q.id}" ${walkish(q)?'checked':''}><span class="grow">${esc(q.name)} <small>${esc((TYPES[q.type]||TYPES.other)[0])} · ${photosOf(q.id).length} photo${photosOf(q.id).length===1?'':'s'} · ${fmtD(dist(p.lat,p.lng,q.lat,q.lng))}</small></span></label>`).join('')}<div class="row wrap" style="margin-top:8px"><button class="sm dark" data-act="walkjoin">Join ticked stops</button><span style="font-size:12.5px;color:var(--mute)">To split them again: Photos › Separate photos.</span></div></div>`}
 function gBlock(p){if(location.protocol==='file:')return `<div class="tip" style="margin-top:6px">Google place picking works in the live app at <b>wholejourneys.github.io/traveldragontrips</b>. Your Google key only works there, so this copy opened from a file can’t use it.</div>`;return `<div class="row" style="margin-top:6px;gap:6px"><h3 class="grow" style="margin:0">Google map <small style="text-transform:none;letter-spacing:0;font-weight:400">· ${TAP.toLowerCase()} a place on it to use it</small></h3><span class="chip${ui.gsat?' on':''}" data-act="gsat">Satellite</span></div>
   ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google map here</button>`:`<div id="gbox" class="gframe" style="overflow:hidden"></div><div id="gask" style="margin-top:6px"></div>
   <div class="link" style="margin-top:6px"><input id="gq" type="text" placeholder="Search Google near this pin, e.g. the hotel name" enterkeyhint="search"><button class="sm" data-act="gsearch">Search</button></div><div id="gres" style="margin-top:4px"></div>
@@ -2182,7 +2196,7 @@ async function gPick(id){const p=S.places.get(ui.placeId),a=$('#gask');if(!p||!a
 /* ---------- Google: what is listed at this pin (for places named only by street or by the open map) ---------- */
 const GSKIP=/^(route|street_address|premise|subpremise|locality|political|postal_code|neighborhood|sublocality|administrative_area|country|intersection|plus_code|geocode|bus_stop|transit_station|parking|atm|electric_vehicle_charging_station)/;
 const gCanAsk=()=>!!gKey()&&/^https?:/.test(location.protocol)&&navigator.onLine&&!gFail;
-const gWants=p=>p&&(isRough(p)||p.nameSrc==='map')&&!p.gid&&!p.gnear;
+const gWants=p=>p&&!p.area&&p.type!=='walk'&&p.type!=='view'&&(isRough(p)||p.nameSrc==='map')&&!p.gid&&!p.gnear;
 const gSame=(a,b)=>{const w=s=>plain(s).split(/[^a-z0-9]+/).filter(x=>x.length>3&&!/^(hotel|hostal|hostel|restaurant|restaurante|cafe|casa|boutique|resort|the)$/.test(x));const B=plain(b);return w(a).some(x=>B.includes(x))};
 async function gNearList(lat,lng){await gmLoad();const {Place}=await google.maps.importLibrary('places');
   const r=await Place.searchNearby({fields:['displayName','location','primaryType','types','googleMapsURI'],locationRestriction:{center:{lat,lng},radius:120},maxResultCount:12,rankPreference:'DISTANCE',language:'en'});
@@ -2247,6 +2261,15 @@ Object.assign(ACT,{
   gspotyes(){const p=S.places.get(ui.placeId),c=ACT._gspot;if(!p||!c)return;gApply(p,c.lat,c.lng);save('places',p);refreshLocality(p);render();map.panTo([p.lat,p.lng]);toast('Pin moved. Undo is under “Find or fix the place”.',5000)},
   gno(){const a=$('#gask');if(a)a.innerHTML='';gTmpOff()},
   gdoneok(){ui.gdone=null;render()},
+  async kind(k){const p=S.places.get(ui.placeId);if(!p)return;
+    if(k==='place'){if(p.type==='walk'||p.type==='view'){snap(p);p.type='other';delete p.area;save('places',p)}ui.ptab='ov';render();const g=$('#gq2');if(g){g.focus();g.select();g.scrollIntoView({block:'center'})}else if(!p.gid)toast('Use “Find this place on Google” to get its name and details.',5000);return}
+    snap(p);const wasBiz=p.gauto||p.nameSrc==='map'||['eat','stay'].includes(p.type)&&!p.gid;
+    if(p.gauto||(p.gid&&wasBiz)){delete p.gid;delete p.gauto;delete p.gmaps;if(p.info){delete p.info.website;delete p.info.phone}}
+    delete p.nameSrc;p.gcand=[];p.gnone=1;p.type=k==='walk'?'walk':'view';p.area=1;p.auto=false;p.rough=false;
+    if(wasBiz||isRough(p)){try{const pr=await reverse(p.lat,p.lng);const a=pr&&areaName(pr);if(a)p.name=k==='view'?'View, '+a:a}catch(e){}}
+    save('places',p);render();toast((k==='walk'?'Now a walk or area: “':'Now a viewpoint: “')+p.name+'”. Undo is under Location.',6000)},
+  walkjoin(){const p=S.places.get(ui.placeId);if(!p)return;const ids=[...document.querySelectorAll('.wjoin input:checked')].map(x=>x.value);const m=walkMates(p).filter(q=>ids.includes(q.id));if(!m.length){toast('Tick the stops to join first.');return}snap(p);for(const q of m)mergePlace(q.id,p.id);
+    const ps=photosOf(p.id).filter(x=>typeof x.lat==='number');if(ps.length){p.lat=ps.reduce((s,x)=>s+x.lat,0)/ps.length;p.lng=ps.reduce((s,x)=>s+x.lng,0)/ps.length}save('places',p);render();drawPins();toast(`Joined ${m.length} stop${m.length>1?'s':''}. The walk’s route shows on the map.`,6000)},
   qclear(){ui.q='';const qi=$('#q');if(qi)qi.value='';document.body.classList.remove('searching');render();setTimeout(()=>map.invalidateSize(),80)},
   async qlook(){const q=(ui.q||'').trim(),o=$('#qres');if(!q||!o)return;o.innerHTML='<div class="gmsg">Looking for “'+esc(q)+'”…</div>';try{o.scrollIntoView({block:'nearest'})}catch(e){}
     const list=ACT._ql=await lookAnywhere(q,map.getCenter());const o2=$('#qres');if(!o2)return;
