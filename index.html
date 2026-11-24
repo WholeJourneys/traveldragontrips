@@ -845,7 +845,10 @@ details.sec[open]>summary::before{transform:rotate(45deg)}
 /* ---------- map pins & popups ---------- */
 .pin{width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--c);border:2px solid #fff;box-shadow:0 2px 6px #16271F66;display:flex;align-items:center;justify-content:center}
 .pin span{transform:rotate(45deg);color:#fff;font:700 12px 'Schibsted Grotesk',sans-serif}
-.pin.on{outline:3px solid var(--marigold);outline-offset:1px}
+.pin.on{position:relative;transform:rotate(-45deg) scale(1.35);transform-origin:0 100%;box-shadow:0 0 0 3px #E11D2E,0 3px 10px #0007}
+.pin.on::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #E11D2E;animation:pinpulse 1.4s ease-out infinite;pointer-events:none}
+@keyframes pinpulse{0%{transform:scale(.55);opacity:.95}100%{transform:scale(1.7);opacity:0}}
+@media (prefers-reduced-motion:reduce){.pin.on::after{animation:none;transform:scale(1.15);opacity:.8}}
 .pin.dim{opacity:.4}
 .pin.plan{background:#fff;border:3px solid var(--c)}
 .pin.plan span{color:var(--c)}
