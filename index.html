@@ -847,6 +847,11 @@ details.sec[open]>summary::before{transform:rotate(45deg)}
 .pin span{transform:rotate(45deg);color:#fff;font:700 12px 'Schibsted Grotesk',sans-serif}
 .pin.on{position:relative;transform:rotate(-45deg) scale(1.35);transform-origin:0 100%;box-shadow:0 0 0 3px #E11D2E,0 3px 10px #0007}
 .pin.on::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #E11D2E;animation:pinpulse 1.4s ease-out infinite;pointer-events:none}
+label.wj .wjn{flex:none;width:20px;height:20px;border-radius:50%;background:#E11D2E;color:#fff;font:700 11px/20px 'Schibsted Grotesk',sans-serif;text-align:center;margin-right:6px}
+.jmk{width:26px;height:26px;border-radius:50%;background:#fff;color:#E11D2E;border:2px solid #E11D2E;font:700 12px/22px 'Schibsted Grotesk',sans-serif;text-align:center;box-shadow:0 2px 6px #0005;opacity:.75}
+.jmk.on{background:#E11D2E;color:#fff;opacity:1}
+.jmk.hot{animation:pinpulse2 .9s ease-in-out infinite}
+@keyframes pinpulse2{0%,100%{box-shadow:0 0 0 0 #E11D2E99}50%{box-shadow:0 0 0 10px #E11D2E00}}
 @keyframes pinpulse{0%{transform:scale(.55);opacity:.95}100%{transform:scale(1.7);opacity:0}}
 @media (prefers-reduced-motion:reduce){.pin.on::after{animation:none;transform:scale(1.15);opacity:.8}}
 .pin.dim{opacity:.4}
@@ -1269,7 +1274,12 @@ const BASES={
 };
 let curBase='street';BASES.street.addTo(map);
 let tileOK=0,tileBad=0;for(const l of Object.values(BASES)){l.on('tileload',()=>{tileOK++;$('#warn').style.display='none'});l.on('tileerror',()=>{tileBad++;if(!tileOK&&tileBad>=4)$('#warn').style.display='block'})}
-const pins=L.layerGroup().addTo(map);const walkLines=L.layerGroup().addTo(map);let routeLine=null;const markerOf=new Map();
+const pins=L.layerGroup().addTo(map);const joinL=L.layerGroup().addTo(map);
+function joinMarks(hot){joinL.clearLayers();const box=document.querySelector('.wjoin');const p=ui.placeId&&S.places.get(ui.placeId);if(!box||!p)return;
+  box.querySelectorAll('label.wj').forEach((lb,i)=>{const q=S.places.get(lb.dataset.wjid);if(!q)return;const on=lb.querySelector('input').checked;
+    L.marker([q.lat,q.lng],{interactive:false,keyboard:false,zIndexOffset:2000,icon:L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],html:`<div class="jmk${on?' on':''}${hot===q.id?' hot':''}">${i+1}</div>`})}).addTo(joinL)})}
+document.addEventListener('change',e=>{if(e.target.closest&&e.target.closest('.wjoin'))joinMarks()});
+document.addEventListener('mouseover',e=>{const lb=e.target.closest&&e.target.closest('label.wj');if(lb&&joinMarks.h!==lb.dataset.wjid){joinMarks.h=lb.dataset.wjid;joinMarks(lb.dataset.wjid)}else if(!lb&&joinMarks.h){joinMarks.h=null;joinMarks()}});const walkLines=L.layerGroup().addTo(map);let routeLine=null;const markerOf=new Map();
 function placeColor(p){return (TYPES[p.type]||TYPES.other)[1]}
 function visiblePlaces(){
   let list=[...S.places.values()];
@@ -1734,7 +1744,7 @@ function render(fit){
   panel.innerHTML=pa?vPartner(pa):p?vPlace(p):({field:vField,maps:vMaps,places:vPlaces,photos:vPhotos,posts:vPosts,partners:vPartners}[ui.tab]||vMaps)();
   if(ui.q)panel.insertAdjacentHTML('afterbegin',`<div class="qbar" role="status"><span class="grow">Showing only matches for “<b>${esc(ui.q)}</b>”</span><button class="sm" data-act="qclear">Clear search</button></div>`);
   const rk=pa?'pa'+pa.id:(ui.placeId||ui.tab+ui.mapId+ui.postId);panel.scrollTop=render.last===rk?top:0;render.last=rk;
-  hydrate(panel);drawPins(fit);if(p){loadNear(p);mountG(p)}
+  hydrate(panel);drawPins(fit);joinMarks();if(p){loadNear(p);mountG(p)}
   $('#stats').textContent=`${S.places.size} places · ${S.photos.size} photos · ${S.maps.size} maps`+(S.partners.size?` · ${S.partners.size} partners`:'')+(DB.ok?'':' · NOT SAVING (private window?)');
 }
 
@@ -2206,7 +2216,7 @@ async function addFound(x,typed){const ex=nearestPlace(x.lat,x.lng,40);if(ex){op
 function walkMates(p){const days=new Set(photosOf(p.id).filter(x=>x.date).map(x=>new Date(x.date).toDateString()));if(!days.size)return [];
   return [...S.places.values()].filter(q=>q.id!==p.id&&!isPlan(q)&&dist(p.lat,p.lng,q.lat,q.lng)<=1500&&(!q.gid||q.gauto)&&photosOf(q.id).some(x=>x.date&&days.has(new Date(x.date).toDateString()))).sort((a,b)=>dist(p.lat,p.lng,a.lat,a.lng)-dist(p.lat,p.lng,b.lat,b.lng))}
 const walkish=q=>q.type==='walk'||q.type==='other'||q.area||isRough(q);
-function walkJoinHtml(p){const m=walkMates(p);if(!m.length)return '';return `<div class="tip wjoin" style="margin-top:10px"><b>Same day, within 1.5 km.</b> Tick the stops that were part of this walk; their photos join it and the route shows on the map.${m.slice(0,12).map(q=>`<label class="wj"><input type="checkbox" value="${q.id}" ${walkish(q)?'checked':''}><span class="grow">${esc(q.name)} <small>${esc((TYPES[q.type]||TYPES.other)[0])} · ${photosOf(q.id).length} photo${photosOf(q.id).length===1?'':'s'} · ${fmtD(dist(p.lat,p.lng,q.lat,q.lng))}</small></span></label>`).join('')}<div class="row wrap" style="margin-top:8px"><button class="sm dark" data-act="walkjoin">Join ticked stops</button><span style="font-size:12.5px;color:var(--mute)">To split them again: Photos › Separate photos.</span></div></div>`}
+function walkJoinHtml(p){const m=walkMates(p);if(!m.length)return '';return `<div class="tip wjoin" style="margin-top:10px"><b>Same day, within 1.5 km.</b> Tick the stops that were part of this walk; their photos join it and the route shows on the map.<div style="font-size:12.5px;margin-top:4px">Each stop is numbered in red on the map. Point at a row to make its pin pulse.</div>${m.slice(0,12).map((q,i)=>`<label class="wj" data-wjid="${q.id}"><input type="checkbox" value="${q.id}" ${walkish(q)?'checked':''}><span class="wjn">${i+1}</span><span class="grow">${esc(q.name)} <small>${esc((TYPES[q.type]||TYPES.other)[0])} · ${photosOf(q.id).length} photo${photosOf(q.id).length===1?'':'s'} · ${fmtD(dist(p.lat,p.lng,q.lat,q.lng))}</small></span></label>`).join('')}<div class="row wrap" style="margin-top:8px"><button class="sm dark" data-act="walkjoin">Join ticked stops</button><span style="font-size:12.5px;color:var(--mute)">You can undo straight after.</span></div></div>`}
 
 function bizAskHtml(p){const b=p.bizAsk;if(!b||p.type!=='walk')return '';return `<div class="tip bizask" style="margin-top:10px"><b>Were you inside ${esc(b.name)}${b.kind?' ('+esc(b.kind)+')':''}, or just in the area?</b> It’s right by where ${photosOf(p.id).length>1?'these photos were':'this photo was'} taken.<div class="row wrap" style="margin-top:8px"><button class="sm dark" data-act="bizyes">I was inside ${esc(b.name)}</button><button class="sm" data-act="bizno">Just the area</button></div></div>`}
 
@@ -2378,8 +2388,14 @@ Object.assign(ACT,{
     delete p.nameSrc;p.gcand=[];p.gnone=1;p.type=k==='walk'?'walk':'view';p.area=1;p.auto=false;p.rough=false;
     if(wasBiz||isRough(p)||!p.areaOf){try{const pr=await reverse(p.lat,p.lng);if(pr){const keep=p.name;setArea(p,pr);if(!(wasBiz||isRough(p)))p.name=keep;else if(k==='view')p.name='View, '+p.name}}catch(e){}}
     save('places',p);render();toast((k==='walk'?'Now a walk or area: “':'Now a viewpoint: “')+p.name+'”. Undo is under Location.',6000)},
-  walkjoin(){const p=S.places.get(ui.placeId);if(!p)return;const ids=[...document.querySelectorAll('.wjoin input:checked')].map(x=>x.value);const m=walkMates(p).filter(q=>ids.includes(q.id));if(!m.length){toast('Tick the stops to join first.');return}snap(p);for(const q of m)mergePlace(q.id,p.id);
-    const ps=photosOf(p.id).filter(x=>typeof x.lat==='number');if(ps.length){p.lat=ps.reduce((s,x)=>s+x.lat,0)/ps.length;p.lng=ps.reduce((s,x)=>s+x.lng,0)/ps.length}save('places',p);render();drawPins();toast(`Joined ${m.length} stop${m.length>1?'s':''}. The walk’s route shows on the map.`,6000)},
+  walkjoin(){const p=S.places.get(ui.placeId);if(!p)return;const ids=[...document.querySelectorAll('.wjoin input:checked')].map(x=>x.value);const m=walkMates(p).filter(q=>ids.includes(q.id));if(!m.length){toast('Tick the stops to join first.');return}
+    const cp=o=>JSON.parse(JSON.stringify(o)),before={p:cp(p),qs:m.map(cp),phs:[...m.map(q=>q.id),p.id].flatMap(id=>photosOf(id)).map(x=>[x.id,x.placeId]),maps:[...S.maps.values()].filter(mm=>(mm.order||[]).some(id=>ids.includes(id))).map(cp)};
+    snap(p);for(const q of m)mergePlace(q.id,p.id);
+    const ps=photosOf(p.id).filter(x=>typeof x.lat==='number');if(ps.length){p.lat=ps.reduce((s,x)=>s+x.lat,0)/ps.length;p.lng=ps.reduce((s,x)=>s+x.lng,0)/ps.length}save('places',p);render();drawPins();
+    pUndo(`Joined ${m.length} stop${m.length>1?'s':''} into “${p.name}”.`,()=>{const t=getTomb();for(const q of before.qs)delete t[q.id];setTomb(t);
+      for(const q of before.qs)save('places',cp(q));save('places',cp(before.p));for(const mm of before.maps)save('maps',cp(mm));
+      for(const [id,pl] of before.phs){const x=S.photos.get(id);if(x){x.placeId=pl;save('photos',x)}}render();drawPins();toast('Undone: the stops are separate again.')});
+    const t=$('#toast');if(t){clearTimeout(toast.t);toast.t=setTimeout(()=>{t.style.display='none';t.style.pointerEvents=''},15000)}},
   qclear(){ui.q='';const qi=$('#q');if(qi)qi.value='';document.body.classList.remove('searching');render();setTimeout(()=>map.invalidateSize(),80)},
   async qlook(){const q=(ui.q||'').trim(),o=$('#qres');if(!q||!o)return;o.innerHTML='<div class="gmsg">Looking for “'+esc(q)+'”…</div>';try{o.scrollIntoView({block:'nearest'})}catch(e){}
     const list=ACT._ql=await lookAnywhere(q,map.getCenter());const o2=$('#qres');if(!o2)return;
