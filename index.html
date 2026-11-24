@@ -855,7 +855,7 @@ details.sec[open]>summary::before{transform:rotate(45deg)}
 .pop img{width:190px;height:116px;object-fit:cover;border-radius:10px;display:block;margin-bottom:8px;background:var(--fir-tint)}
 .pop b{display:block;font-size:15px}
 .nearb{display:block;width:100%;text-align:left;margin-bottom:6px;white-space:normal}.nearb span{color:var(--mute);font-size:12.5px;font-weight:400}
-.gframe{width:100%;height:250px;border:1px solid var(--line);border-radius:var(--r-card);margin-top:8px;background:var(--fir-tint);display:block;overflow:hidden}
+.gframe{width:100%;height:340px;border:1px solid var(--line);border-radius:var(--r-card);margin-top:8px;background:var(--fir-tint);display:block;overflow:hidden}
 
 /* ---------- post preview ---------- */
 .pv{border:1px solid var(--line);border-radius:var(--r-card);background:var(--surface);overflow:hidden;margin-top:6px;box-shadow:0 1px 3px #16271F14}
@@ -957,7 +957,7 @@ aside,header{min-width:0}
   #light img{max-width:100vw;max-height:56dvh;border-radius:0}
   .rvnav{top:auto;bottom:calc(52px + env(safe-area-inset-bottom));transform:none}
   #rvHelp{bottom:calc(12px + env(safe-area-inset-bottom));padding:0 70px;font-size:11px}
-  .gframe{height:220px}
+  .gframe{height:300px}
 }
 
 .rvplace{display:flex;align-items:center;gap:10px;width:min(86vw,640px);text-align:left;background:#ffffff14!important;color:#fff!important;border:1px solid #ffffff33!important;border-radius:var(--r-card);padding:10px 12px;font-weight:400;white-space:normal}
@@ -2234,6 +2234,7 @@ function gBlock(p){if(location.protocol==='file:')return `<div class="tip" style
   ${PHONE()&&!ui.gshow?`<button data-act="gshow" style="width:100%;margin-top:6px">Show the Google map here</button>`:`<div id="gbox" class="gframe" style="overflow:hidden"></div><div id="gask" style="margin-top:6px"></div>
   <div class="link" style="margin-top:6px"><input id="gq" type="text" placeholder="Search Google near this pin, e.g. the hotel name" enterkeyhint="search"><button class="sm" data-act="gsearch">Search</button></div><div id="gres" style="margin-top:4px"></div>
   <div class="mono" style="color:var(--mute);margin-top:4px">${TAP} a hotel, restaurant or sight on the map, or search by name. ${TAP} empty ground to move just the pin.${TOUCH?' Use two fingers to move the map.':''}</div>`}`}
+let gCandMk=[];
 async function mountG(p){if(!gKey()||!$('#gbox'))return;if(gFail){$('#gbox').innerHTML=gFailHtml();return}
   let maps;try{maps=await gmLoad()}catch(e){const b=$('#gbox');if(b)b.innerHTML='<div class="mono" style="padding:12px;color:var(--mute)">The Google map needs an internet connection.</div>';return}
   const b=$('#gbox');if(!b||ui.placeId!==p.id||gFail)return;const pos={lat:p.lat,lng:p.lng};
@@ -2242,7 +2243,12 @@ async function mountG(p){if(!gKey()||!$('#gbox'))return;if(gFail){$('#gbox').inn
     gMap.addListener('click',e=>{if(e.placeId){if(e.stop)e.stop();gPick(e.placeId)}else if(e.latLng)gSpot(e.latLng.lat(),e.latLng.lng())});
     try{gMk=new maps.Marker({map:gMap,position:pos,title:'Where this place is pinned now'})}catch(e){gMk=null}}
   b.innerHTML='';b.appendChild(gDiv);gMap.setMapTypeId(ui.gsat?'hybrid':'roadmap');
-  const key=p.id+'|'+p.lat+'|'+p.lng;if(gFor!==key){gFor=key;gMap.setCenter(pos);gMap.setZoom(17);if(gMk)gMk.setPosition(pos)}}
+  const cand=!p.gid&&(p.gcand||[]).length?p.gcand:[];
+  const key=p.id+'|'+p.lat+'|'+p.lng+'|'+cand.map(c=>c.id).join(',');if(gFor!==key){gFor=key;if(gMk)gMk.setPosition(pos);
+    for(const m of gCandMk)m.setMap(null);gCandMk=[];
+    cand.forEach((c,i)=>{try{const m=new maps.Marker({map:gMap,position:{lat:c.lat,lng:c.lng},label:{text:String(i+1),color:'#fff',fontWeight:'700'},title:c.name});m.addListener('click',()=>gPick(c.id));gCandMk.push(m)}catch(e){}});
+    if(p.gwide&&cand.length){const bd=new maps.LatLngBounds(pos);cand.slice(0,5).forEach(c=>bd.extend({lat:c.lat,lng:c.lng}));gMap.fitBounds(bd,40);maps.event.addListenerOnce(gMap,'idle',()=>{if(gMap.getZoom()>17)gMap.setZoom(17)})}
+    else{gMap.setCenter(pos);gMap.setZoom(p.gid||cand.length?17:15)}}}
 function gSpot(lat,lng){const p=S.places.get(ui.placeId),a=$('#gask');if(!p||!a)return;ACT._gspot={lat,lng};
   a.innerHTML=`<div class="card" style="cursor:default;display:block"><div class="t">Move the pin to this spot?</div><div class="s">${fmtD(dist(p.lat,p.lng,lat,lng))} from where it is now. The name stays “${esc(p.name)}”.</div><div class="row wrap" style="margin-top:8px"><button class="primary sm" data-act="gspotyes">Yes, move it</button><button class="sm" data-act="gno">No</button></div></div>`}
 function gType(types){const t=' '+(types||[]).join(' ')+' ';if(/ (lodging|hotel|resort_hotel|bed_and_breakfast|guest_house|hostel|inn|motel|farmstay|campground|cottage|private_guest_room|extended_stay_hotel) /.test(t))return 'stay';if(/ (restaurant|cafe|bar|bakery|coffee_shop|wine_bar|pub|meal_takeaway|ice_cream_shop|food) /.test(t)||/_restaurant /.test(t))return 'eat';if(/ (hiking_area|trail) /.test(t))return 'walk';if(/ (observation_deck|beach|natural_feature|scenic_spot|park|national_park|garden) /.test(t))return 'view';if(/ (tourist_attraction|museum|historical_landmark|historical_place|cultural_landmark|art_gallery|church|place_of_worship|monument|winery|farm|spa|visitor_center) /.test(t))return 'exp';if(/ (parking|train_station|bus_station|airport|ferry_terminal|transit_station|car_rental) /.test(t))return 'move';if(/ (convention_center|event_venue) /.test(t))return 'show';return null}
@@ -2260,9 +2266,9 @@ const GSKIP=/^(route|street_address|premise|subpremise|locality|political|postal
 const gCanAsk=()=>!!gKey()&&/^https?:/.test(location.protocol)&&navigator.onLine&&!gFail;
 const gWants=p=>p&&!p.area&&p.type!=='walk'&&p.type!=='view'&&(isRough(p)||p.nameSrc==='map')&&!p.gid&&!p.gnear;
 const gSame=(a,b)=>{const w=s=>plain(s).split(/[^a-z0-9]+/).filter(x=>x.length>3&&!/^(hotel|hostal|hostel|restaurant|restaurante|cafe|casa|boutique|resort|the)$/.test(x));const B=plain(b);return w(a).some(x=>B.includes(x))};
-async function gNearList(lat,lng){await gmLoad();const {Place}=await google.maps.importLibrary('places');
-  const r=await Place.searchNearby({fields:['displayName','location','primaryType','types','googleMapsURI'],locationRestriction:{center:{lat,lng},radius:120},maxResultCount:12,rankPreference:'DISTANCE',language:'en'});
-  return (r.places||[]).filter(x=>x.displayName&&x.location&&!GSKIP.test(x.primaryType||(x.types||[])[0]||'')).map(x=>{const la=x.location.lat(),ln=x.location.lng(),ty=[x.primaryType,...(x.types||[])].filter(Boolean),t=gType(ty);return {id:x.id,name:x.displayName,lat:la,lng:ln,url:x.googleMapsURI||'',t:t||'',kind:t?TYPES[t][0]:String(x.primaryType||'').replace(/_/g,' '),d:Math.round(dist(lat,lng,la,ln))}}).sort((a,b)=>a.d-b.d).slice(0,6)}
+async function gNearList(lat,lng,rad=120,n=6){await gmLoad();const {Place}=await google.maps.importLibrary('places');
+  const r=await Place.searchNearby({fields:['displayName','location','primaryType','types','googleMapsURI'],locationRestriction:{center:{lat,lng},radius:rad},maxResultCount:rad>120?20:12,rankPreference:'DISTANCE',language:'en'});
+  return (r.places||[]).filter(x=>x.displayName&&x.location&&!GSKIP.test(x.primaryType||(x.types||[])[0]||'')).map(x=>{const la=x.location.lat(),ln=x.location.lng(),ty=[x.primaryType,...(x.types||[])].filter(Boolean),t=gType(ty);return {id:x.id,name:x.displayName,lat:la,lng:ln,url:x.googleMapsURI||'',t:t||'',kind:t?TYPES[t][0]:String(x.primaryType||'').replace(/_/g,' '),d:Math.round(dist(lat,lng,la,ln))}}).sort((a,b)=>a.d-b.d).slice(0,n)}
 async function gUseId(p,c,auto){const {Place}=await google.maps.importLibrary('places');const pl=new Place({id:c.id});await pl.fetchFields({fields:['displayName','location','googleMapsURI','websiteURI','nationalPhoneNumber','internationalPhoneNumber','primaryType','types']});
   p=S.places.get(p.id);if(!p)return false;snap(p);p.lat=pl.location.lat();p.lng=pl.location.lng();p.name=pl.displayName||c.name;p.gmaps=pl.googleMapsURI||c.url||'';p.gid=c.id;p.auto=false;p.rough=false;p.gfill=1;
   const t=gType([pl.primaryType,...(pl.types||[])].filter(Boolean));if(t&&(!p.type||p.type==='other'))p.type=t;
@@ -2276,7 +2282,8 @@ async function runGNear(){if(gnBusy)return;gnBusy=true;let ch=false,bad=0;
       const a=list[0],b=list[1];let done=false;
       if(a&&a.t&&a.d<=40&&(!b||b.d>=Math.max(80,2.5*a.d))&&(gSame(p.name,a.name)||gSame(a.name,p.name))){try{done=await gUseId(p,a,true)}catch(e){}}
       if(!done&&!isRough(p)&&list.length&&list.some(c=>gSame(p.name,c.name)||gSame(c.name,p.name))){const m=list.find(c=>gSame(p.name,c.name)||gSame(c.name,p.name));if(m&&m.d<=150){try{done=await gUseId(p,m,true)}catch(e){}}}
-      if(!done){p.gnear=Date.now();p.gcand=list.map(({id,name,lat,lng,url,kind,d})=>({id,name,lat,lng,url,kind,d}));save('places',p)}
+      let wide=false;if(!done&&!list.length){try{const w=await gNearList(p.lat,p.lng,2000,8);p=S.places.get(id)||p;if(w.length){list.push(...w);wide=true}}catch(e){}}
+      if(!done){p.gnear=Date.now();p.gcand=list.map(({id,name,lat,lng,url,kind,d})=>({id,name,lat,lng,url,kind,d}));if(wide)p.gwide=1;else delete p.gwide;p.gwtry=1;save('places',p)}
       else if(ui.placeId===id)toast('Google lists “'+S.places.get(id).name+'” at this pin. Name, website and phone filled in. Undo is at the top.',8000);
       ch=true}
     catch(e){gnErr=String(e&&e.message||e).slice(0,160);ch=true;if(++bad>=2){gnQ.length=0;break}}
@@ -2289,7 +2296,9 @@ function gNearHtml(p){
   const named=!isRough(p);
   if(!p.gnear)return gnErr?`<div class="mono" style="color:var(--rust);margin-top:6px">Google could not check this pin: ${esc(gnErr)}</div>`:gCanAsk()?`<div class="mono" id="gnwait" style="color:var(--mute);margin-top:6px">Checking what Google lists at this pin…</div>`:'';
   const l=p.gcand||[];
-  if(!l.length)return p.gnone||named?'':`<div class="tip" style="margin:8px 0 0">Google lists no hotel, restaurant or other business within 120 m of this pin, so there is no contact info to pull. A private home or rental has no listing. Type its name at the top and add a link or phone under Contact, or use “Find this place on Google” above.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="gcandno">OK</button><button class="sm" data-act="gcandagain">Check again</button></div></div>`;
+  if(!l.length&&!p.gnone&&!named&&!p.gwtry&&gCanAsk()){setTimeout(()=>{const q=S.places.get(p.id);if(q&&!q.gwtry){delete q.gnear;save('places',q);queueGNear(q.id)}},0);return `<div class="mono" style="color:var(--mute);margin-top:6px">Nothing listed right at the pin. Looking further out…</div>`}
+  if(l.length&&p.gwide)return `<div class="tip" style="margin:8px 0 0"><b>Which place did you stop at?</b> Nothing is listed right at the pin, which happens when a photo is taken from a boat or a road. These are the nearest places Google lists, numbered on the Google map below. Tap the right one and its name, website, phone and Google link fill in.<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${l.map((c,i)=>`<button class="sm nearb" data-act="gcand" data-id="${i}"><b>${i+1}. ${esc(c.name)}</b> <span>${esc(c.kind||'')}${c.kind?' · ':''}${fmtD(c.d)}</span></button>`).join('')}</div><div class="row wrap" style="margin-top:6px"><button class="sm ghost" data-act="gcandno">None of these</button></div><div class="mono" style="color:var(--mute);margin-top:6px">Not listed? ${TAP} its spot on the Google map, or type its name in the Google search under the map.</div></div>`;
+  if(!l.length)return p.gnone||named?'':`<div class="tip" style="margin:8px 0 0">Google lists no hotel, restaurant or other business within 2 km of this pin, so there is no contact info to pull. A private home or rental has no listing. Type its name at the top and add a link or phone under Contact, or use “Find this place on Google” above.<div class="row wrap" style="margin-top:6px"><button class="sm" data-act="gcandno">OK</button><button class="sm" data-act="gcandagain">Check again</button></div></div>`;
   return `<div class="tip" style="margin:8px 0 0"><b>${named?'Is “'+esc(p.name)+'” one of these Google listings?':'Which one is this?'}</b> Tap it and the name, website, phone and Google link fill in.<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${l.map((c,i)=>`<button class="sm nearb" data-act="gcand" data-id="${i}"><b>${esc(c.name)}</b> <span>${esc(c.kind||'')}${c.kind?' · ':''}${fmtD(c.d)}</span></button>`).join('')}</div><div class="row wrap" style="margin-top:6px"><button class="sm ghost" data-act="gcandno">${named?'None: keep my name':'None of these'}</button></div></div>`}
 Object.assign(ACT,{
   gmatchall(){const n=[...S.places.values()].filter(p=>!p.gid&&!isPlan(p)&&!p.gnone).length;
@@ -2300,7 +2309,7 @@ Object.assign(ACT,{
     ACT._gm={n,before:[...S.places.values()].filter(p=>p.gid).length};toast('Checking '+n+' place'+(n>1?'s':'')+' with Google…',6000);runGNear()},
   async gcand(i){const p=S.places.get(ui.placeId),c=p&&(p.gcand||[])[+i];if(!c)return;toast('Asking Google for the details…');try{if(!gCanAsk())throw new Error('Google is not available right now');await gmLoad();if(await gUseId(p,c,false)){ui.gdone=p.id;render();gShowSaved();const q=S.places.get(p.id);map.panTo([q.lat,q.lng]);}}catch(e){toast('Google could not give the details. '+(e&&e.message||''),6000)}},
   gcandno(){const p=S.places.get(ui.placeId);if(!p)return;p.gcand=[];p.gnone=1;p.gnear=p.gnear||Date.now();save('places',p);render()},
-  gcandagain(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gnear;delete p.gnone;p.gcand=[];save('places',p);render();queueGNear(p.id)},
+  gcandagain(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gnear;delete p.gnone;delete p.gwtry;delete p.gwide;p.gcand=[];save('places',p);render();queueGNear(p.id)},
   gautook(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gauto;save('places',p);render()},
   gautoundo(){const p=S.places.get(ui.placeId);if(!p)return;delete p.gauto;delete p.gid;delete p.gfill;p.gnear=Date.now();p.gcand=[];p.gnone=1;if(!undoLoc(p))save('places',p);render();map.panTo([p.lat,p.lng]);toast('Back to '+p.name)}});
 function gApply(p,lat,lng){snap(p);p.lat=lat;p.lng=lng;delete p.gnear;delete p.gnone;p.gcand=[]}
