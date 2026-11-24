@@ -1411,7 +1411,7 @@ async function runEnrich(){if(enBusy)return;enBusy=true;let ch=false;while(enQ.l
 async function backfillAreas(){const todo=[...S.places.values()].filter(p=>p.region===undefined);let ch=false;for(const p of todo){try{const pr=await reverse(p.lat,p.lng);p.region=(pr&&pr.county)||'';p.state=(pr&&pr.state)||'';if(pr&&!p.locality)p.locality=pr.city||pr.town||pr.village||'';if(pr&&!p.country)p.country=pr.country||'';save('places',p);ch=true}catch(e){break}await sleep(700)}if(ch)softRender()}
 
 /* ---------- photo import ---------- */
-const pickBtn=(kind,label)=>TOUCH?`<span class="pickwrap"><button class="primary" type="button" tabindex="-1">${label}</button><input type="file" multiple accept="image/*,video/*" data-pick="${kind}" data-place="${kind==='here'?ui.placeId||'':''}" onchange="pickDone(this)" aria-label="${label}"></span>`:`<button class="primary" data-act="${kind==='here'?'pickhere':'pick2'}">${label}</button>`;
+const pickBtn=(kind,label,pid,st)=>TOUCH?`<span class="pickwrap"${st?` style="${st}"`:''}><button class="primary" type="button" tabindex="-1"${st?' style="width:100%"':''}>${label}</button><input type="file" multiple accept="image/*,video/*" data-pick="${kind}" data-place="${kind==='here'?pid||ui.placeId||'':''}" onchange="pickDone(this)" aria-label="${label}"></span>`:`<button class="primary" data-act="${kind==='here'?'pickhere':'pick2'}"${pid?` data-id="${pid}"`:''}${st?` style="${st}"`:''}>${label}</button>`;
 function pickNote(n){if(IOS&&n===1)setTimeout(()=>toast('The iPhone handed over 1 photo. To add several at once: tap each photo so it gets a tick, then tap Add or Done at the top right of the photo screen.',12000),5200)}
 /* called straight from the input, so it still works if the screen was redrawn while the photo chooser was open */
 function pickDone(el){const fs=[...el.files],kind=el.dataset.pick;try{el.value=''}catch(e){}if(!fs.length)return;pickNote(fs.length);if(kind==='here'){const id=S.places.has(el.dataset.place)?el.dataset.place:ui.placeId;addToPlace(fs,id)}else{if($('#pickTip')&&$('#pickTip').checked)LSset('tdt_picktip','0');closeModal();askImport(fs)}}
@@ -1480,7 +1480,7 @@ async function collectDropped(dt){const out=[];const items=[...(dt.items||[])].m
   for(const e of items)await walk(e);return out}
 
 function askImport(files){files=files.filter(isMedia);const empty=files.filter(f=>!f.size).length;files=files.filter(f=>f.size>0);if(!files.length){if(empty)modal(`<h2>Nothing could be read</h2>${emptyNote(empty)}<div class="row" style="justify-content:flex-end"><button class="primary" data-act="closemodal">OK</button></div>`);else toast('No photos or videos found in that drop');return}
-  askImport.files=files;const cur=ui.mapId;
+  askImport.files=files;const cur=ui.mapId||(ui.tab==='photos'&&ui.photoMap&&ui.photoMap!=='none'&&S.maps.has(ui.photoMap)?ui.photoMap:null);
   modal(`<h2>Add ${files.length} photo${files.length>1?'s':''} / video${files.length>1?'s':''}</h2>
   <p style="color:var(--mute);margin:4px 0 0">Location and date are read from each file. A small preview is kept on this device; your originals are not copied or uploaded.</p>${empty?emptyNote(empty):''}
   <label class="f">Put them on this map</label>
@@ -1568,6 +1568,7 @@ function vMaps(){
   if(ui.mapId&&S.maps.get(ui.mapId)){const m=S.maps.get(ui.mapId);const ps=visiblePlaces();
     return `<button class="ghost back" data-act="allmaps">← All maps</button>
     <input class="title" type="text" value="${esc(m.name)}" data-f="name" data-store="maps" data-id="${m.id}" aria-label="Map name">
+    <div style="margin:8px 0 4px">${pickBtn('all','+ Add photos to this map','','width:100%;display:block')}</div>
     <textarea placeholder="Public description of this map (shown on the share page)" data-f="desc" data-store="maps" data-id="${m.id}" style="min-height:60px;margin-top:6px">${esc(m.desc)}</textarea>
     <label class="f">Hashtags for this map <small>— leave empty to use the area</small></label><input type="text" value="${esc(m.hash||'')}" placeholder="${esc(hashtags(areaTags(ps)))}" data-f="hash" data-store="maps" data-id="${m.id}">
     ${ps.some(isRough)?`<div class="private" style="border:1px solid #e6cfae;border-radius:8px;padding:8px;margin-top:10px;font-size:13px">${ps.filter(isRough).length} stop${ps.filter(isRough).length>1?'s':''} still carry a street name. Open each to name it; until then they are left out of posts and share pages.</div>`:''}
@@ -1602,7 +1603,7 @@ function photoList(){let ps=[...S.photos.values()].filter(inScope).sort((a,b)=>b
   if(ui.inView){const b=map.getBounds();ps=ps.filter(p=>{const pl=p.placeId&&S.places.get(p.placeId);return pl&&b.contains([pl.lat,pl.lng])})}
   if(ui.q){const hc=new Map(),ph_=pl=>{if(!hc.has(pl.id))hc.set(pl.id,placeHay(pl));return hc.get(pl.id)};ps=ps.filter(p=>{const pl=p.placeId&&S.places.get(p.placeId);return hit((p.name+' '+(p.cap||'')+' '+new Date(p.date).getFullYear()+(p.star?' best':'')+(p.edit?' edit':'')+(p.kind==='video'?' video':'')+' '+(pl?ph_(pl):'')).toLowerCase(),ui.q)})}
   return ps}
-function vPhotos(){const base=photoList();const f=ui.photoFilter;const cnt={all:base.length,unplaced:base.filter(p=>!p.placeId).length,best:base.filter(p=>p.star).length,bytime:base.filter(p=>p.byTime).length};cnt.rest=cnt.all-cnt.best;cnt.edit=base.filter(p=>p.edit).length;cnt.unused=photoPick(base,'unused').length;
+function vPhotos(){const base=photoList();const f=ui.photoFilter;const cnt={all:base.length,unplaced:base.filter(p=>!p.placeId).length,best:base.filter(p=>p.star).length,bytime:base.filter(p=>p.byTime).length};cnt.rest=cnt.all-cnt.best;cnt.edit=base.filter(p=>p.edit).length;cnt.unused=photoPick(base,'unused').length;cnt.useok=photoPick(base,'useok').length;cnt.useint=photoPick(base,'useint').length;
   const ps=photoPick(base,f);
   const shown=ps.slice(0,ui.photoLimit);const chip=(id,label,tip)=>`<span class="chip${f===id?' on':''}" data-act="pf" data-id="${id}" title="${tip||''}">${label} ${cnt[id]}</span>`;
   const {pm,pp}=photoScope(),all=[...S.photos.values()],mapsL=[...S.maps.values()].sort((a,b)=>(b.created||0)-(a.created||0)),mc=id=>all.filter(ph=>{const pl=ph.placeId&&S.places.get(ph.placeId);return id==='none'?(!pl||!(pl.maps||[]).length):pl&&(pl.maps||[]).includes(id)}).length;
@@ -1610,7 +1611,9 @@ function vPhotos(){const base=photoList();const f=ui.photoFilter;const cnt={all:
   const scope=`<div class="row wrap pscope" style="gap:6px;margin-bottom:10px"><select id="photoMapSel" aria-label="Show photos from which map" style="flex:1;min-width:150px"><option value="">All maps · ${all.length} photos</option>${mapsL.map(m=>`<option value="${m.id}"${pm===m.id?' selected':''}>${esc(m.name)} · ${mc(m.id)}</option>`).join('')}<option value="none"${pm==='none'?' selected':''}>Not on any map · ${mc('none')}</option></select><select id="photoPlaceSel" aria-label="Show photos from one place" style="flex:1;min-width:150px"><option value="">${pm?'Every place on this map':'Every place'}</option>${plL.map(([pl,n])=>`<option value="${pl.id}"${pp===pl.id?' selected':''}>${esc(pl.name)} · ${n}</option>`).join('')}</select>${pm||pp?'<button class="sm ghost" data-act="pscopeclear">Show all</button>':''}</div>`;
   const tools=ui.ptools||f!=='all'||ui.inView;
   const selN=ui.sel.size,selPh=[...ui.sel].map(id=>S.photos.get(id)).filter(Boolean),allStar=selN&&selPh.every(p=>p.star),allEdit=selN&&selPh.every(p=>p.edit);
+  const addLbl=pp&&S.places.get(pp)?'+ Add photos to “'+esc(S.places.get(pp).name)+'”':pm&&pm!=='none'&&S.maps.get(pm)?'+ Add photos to '+esc(S.maps.get(pm).name):'+ Add photos';
   return `${scope}
+  <div style="margin-bottom:10px">${pickBtn(pp?'here':'all',addLbl,pp||'','width:100%;display:block')}</div>
   <div class="phsafe">Your originals in Apple Photos are never changed or deleted from here. This app keeps its own small copies to put on maps and posts.</div>
   ${(()=>{const b=brokenPhotos().length;return b?`<div class="row" style="margin-bottom:8px"><span class="chip" style="background:var(--rust);color:#fff" data-act="delbroken">Remove ${b} empty photo${b>1?'s':''} (did not import)</span></div>`:''})()}
   ${selN?`<div class="selbar"><div class="row wrap" style="gap:6px"><b class="grow">${selN} selected</b><button class="sm ghost" data-act="clearsel">Clear</button></div>
@@ -1631,7 +1634,7 @@ function vPhotos(){const base=photoList();const f=ui.photoFilter;const cnt={all:
   ${ps.length&&ui.selMode&&!selN?`<div style="color:var(--mute);font-size:13px;margin-bottom:8px">Tap photos to select them.</div>`:''}
   <div class="strip g3">${shown.map(phTile).join('')}</div>
   ${ps.length>shown.length?`<button style="width:100%;margin-top:10px" data-act="morephotos">Show more (${ps.length-shown.length})</button>`:''}
-  ${ps.length?'':`<div class="empty">No photos here${ui.inView?' in this part of the map':''}${pm||pp?' for this '+(pp?'place':'map'):''}.</div>`}`}
+  ${ps.length?'':f!=='all'&&cnt.all?`<div class="empty">None of the ${cnt.all} photo${cnt.all>1?'s':''} here ${cnt.all>1?'match':'matches'} this filter.<div style="margin-top:10px"><button class="sm primary" data-act="pf" data-id="all">Show all ${cnt.all}</button></div></div>`:`<div class="empty">No photos here${ui.inView?' in this part of the map':''}${pm||pp?' for this '+(pp?'place':'map'):''} yet. Use the Add photos button above.</div>`}`}
 
 function vPosts(){
   if(ui.postId&&S.posts.get(ui.postId)){const po=S.posts.get(ui.postId);const lim=LIMITS[po.platform]||2200;const phs=postPhotos(po),psel=new Set((po.photoIds||[]).filter(id=>S.photos.has(id)));
@@ -2052,7 +2055,7 @@ Object.assign(ACT,{
     const p=newPlace(n.lat,n.lng,{name:n.name,auto:false,rough:false});const t=n.pr&&guessType(n.pr);if(t)p.type=t;save('places',p);openPlace(p.id);refreshLocality(p);queueEnrich(p.id);toast('Added '+n.name+'. Photos and notes go below.',5000)},
   herenew(){const c=ACT._here;if(!c)return;closeModal();const p=newPlace(c.lat,c.lng,{});openPlace(p.id);queueGeocode(p.id)},
   hereopen(id){closeModal();openPlace(id)},
-  pickhere(){pickMany('#fileHere')},
+  pickhere(id){ACT._herePlace=S.places.has(id)?id:null;pickMany('#fileHere')},
   gshow(){ui.gshow=true;render()},
   shownear(){ui.near=ui.placeId;render()},
   sharefile(){const f=deliver.file;if(!f)return;navigator.share({files:[f]}).then(()=>{closeModal();toast('Sent')}).catch(e=>{if(e&&e.name!=='AbortError')toast('Sharing did not work here. Use Download instead.',6000)})},
@@ -2070,7 +2073,7 @@ Object.assign(ACT,{
     <h3>Spreadsheet</h3><button data-act="sheetall">Save all places as a spreadsheet</button><div class="mono" style="color:var(--mute);margin-top:6px">Opens in Excel. It includes your private notes.</div>
     <div class="row" style="justify-content:flex-end;margin-top:16px"><button data-act="closemodal">Close</button></div>`)}
 });
-document.addEventListener('change',e=>{if(e.target.id==='fileHere'){const fs=[...e.target.files];e.target.value='';addToPlace(fs,ui.placeId)}});
+document.addEventListener('change',e=>{if(e.target.id==='fileHere'){const fs=[...e.target.files];e.target.value='';const pid=ACT._herePlace||ui.placeId;ACT._herePlace=null;addToPlace(fs,pid)}});
 
 /* swipe through photos */
 (()=>{let x0=null,y0=null;const el=$('#light');el.addEventListener('touchstart',e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY},{passive:true});el.addEventListener('touchend',e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;x0=null;if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5)dx<0?ACT.rvnext():ACT.rvprev()},{passive:true});
@@ -2531,7 +2534,7 @@ Object.assign(ACT,{
   placephotos(){const p=S.places.get(ui.placeId);if(!p)return;ui.photoPlace=p.id;ui.photoMap=(p.maps||[])[0]||null;ui.tab='photos';ui.placeId=null;ui.photoFilter='all';ui.photoLimit=240;ui.inView=false;render(true)}
 });
 document.addEventListener('change',e=>{const el=e.target;
-  if(el.id==='photoMapSel'){ui.photoMap=el.value||null;ui.photoPlace=null;ui.photoLimit=240;ui.inView=false;render(true);return}
+  if(el.id==='photoMapSel'){ui.photoMap=el.value||null;if(ui.photoMap&&ui.photoMap!=='none'&&ui.photoFilter==='unplaced')ui.photoFilter='all';ui.photoPlace=null;ui.photoLimit=240;ui.inView=false;render(true);return}
   if(el.id==='photoPlaceSel'){ui.photoPlace=el.value||null;ui.photoLimit=240;ui.inView=false;render(true)}});
 
 /* ---------- originals: filename, time taken, link to the original (videos play from the link) ---------- */
